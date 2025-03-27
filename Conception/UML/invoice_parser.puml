@@ -1,0 +1,24 @@
+@startuml invoice_parser
+
+title Workflow d'Extraction de Factures
+
+start
+
+:Récupération des emails;
+:Extraction des pièces jointes PDF;
+
+fork
+  :Analyse OCR avec Tesseract;
+  :Génération données textuelles;
+fork again
+  :Analyse par IA;
+  :Extraction informations structurées;
+end fork
+
+:Fusion et validation des résultats;
+:Traitement par IA pour CSV;
+:Génération fichier CSV;
+
+stop
+
+@enduml
