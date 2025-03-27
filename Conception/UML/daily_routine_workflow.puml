@@ -1,0 +1,34 @@
+@startuml daily_routine_workflow
+title Workflow du Compte Rendu Quotidien - Diagramme d'Activité
+
+|#AntiqueWhite|Planificateur de Tâches|
+start
+:Déclenchement automatique (tous les matins);
+
+|#LightSkyBlue|Système Email|
+:Connexion à la boîte mail;
+:Récupération des nouveaux emails;
+:Analyse du nombre de messages
+et expéditeurs importants;
+
+|#PaleGreen|Système de Base de Données|
+:Connexion à la base de données;
+:Récupération du planning du jour;
+:Extraction des projets en cours;
+:Identification des échéances proches;
+
+|#LightPink|Service IA|
+:Collecte de toutes les informations 
+(emails, planning, projets);
+:Analyse et synthèse des données;
+:Priorisation des informations;
+:Génération du compte rendu quotidien
+avec les points importants;
+
+|#LightGoldenRodYellow|Interface Utilisateur|
+:Mise en forme du compte rendu;
+:Notification à l'utilisateur;
+:Affichage du compte rendu;
+stop
+
+@enduml

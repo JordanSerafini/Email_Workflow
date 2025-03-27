@@ -1,0 +1,134 @@
+@startuml email_reader
+title Workflow de Lecture et Synthèse des Emails
+
+' Diagramme d'activité
+skinparam backgroundColor white
+skinparam activityBorderColor black
+skinparam activityBackgroundColor LightSkyBlue
+
+|#LightBlue|Système Email|
+start
+:Connexion à la boîte mail;
+:Récupération des nouveaux emails non lus;
+:Extraction des informations principales
+(expéditeur, sujet, date, contenu);
+
+|#PaleGreen|Service IA|
+:Réception des données brutes des emails;
+:Analyse du contenu des emails;
+:Classification par importance et catégorie;
+:Extraction des points clés;
+:Génération de la synthèse pour chaque email;
+:Consolidation des synthèses;
+
+|#LightYellow|Interface Utilisateur|
+:Présentation des synthèses à l'utilisateur;
+:Affichage organisé par priorité;
+:Option d'accès au contenu complet;
+stop
+
+@enduml
+
+@startuml email_reader_sequence
+title Workflow de Lecture et Synthèse des Emails - Séquence
+
+actor Utilisateur as User
+participant "Système\nEmail" as Email
+participant "Service IA" as AI
+participant "Interface\nUtilisateur" as UI
+
+User -> Email: Demande de récupération des emails
+activate Email
+Email -> Email: Connexion au serveur mail
+Email -> Email: Récupération des nouveaux emails
+Email -> Email: Extraction des données importantes
+Email --> AI: Transmission des emails
+deactivate Email
+
+activate AI
+AI -> AI: Analyse du contenu
+AI -> AI: Classification et priorisation
+AI -> AI: Extraction des informations clés
+AI -> AI: Génération des synthèses
+AI --> UI: Envoi des synthèses
+deactivate AI
+
+activate UI
+UI -> UI: Mise en forme des synthèses
+UI -> UI: Organisation par priorité
+UI -> User: Présentation des synthèses
+User -> UI: Sélection d'un email (optionnel)
+UI -> User: Affichage du contenu détaillé (optionnel)
+deactivate UI
+
+@enduml
+
+@startuml email_reader_class
+title Modèle de Classes du Système de Lecture d'Emails
+
+class EmailReader {
+  -serveurEmail: String
+  -identifiants: Credentials
+  +connecter(): boolean
+  +récupérerNouveauxEmails(): List<Email>
+  +extraireDonnées(emails: List<Email>): List<EmailData>
+  +transmettreDonnées(données: List<EmailData>): void
+}
+
+class Email {
+  -id: String
+  -expéditeur: String
+  -destinataires: List<String>
+  -sujet: String
+  -contenu: String
+  -dateRéception: DateTime
+  -pièceJointes: List<PièceJointe>
+  -lu: boolean
+  +marquerCommeLu(): void
+  +récupérerContenu(): String
+}
+
+class EmailData {
+  -id: String
+  -expéditeur: String
+  -sujet: String
+  -dateRéception: DateTime
+  -contenuTexte: String
+  -contenuHTML: String
+  -taillePièceJointes: int
+  +toString(): String
+}
+
+class ServiceIA {
+  -modèle: String
+  -paramètres: Map<String, Object>
+  +analyserEmails(emailsData: List<EmailData>): List<EmailSynthèse>
+  +prioriser(synthèses: List<EmailSynthèse>): List<EmailSynthèse>
+}
+
+class EmailSynthèse {
+  -emailId: String
+  -expéditeur: String
+  -sujet: String
+  -dateRéception: DateTime
+  -résumé: String
+  -pointsClés: List<String>
+  -priorité: int
+  -catégorie: String
+  -actionRequise: boolean
+  +toHTML(): String
+}
+
+class InterfaceUtilisateur {
+  +afficherSynthèses(synthèses: List<EmailSynthèse>): void
+  +afficherEmailComplet(emailId: String): void
+  +filtrerParCatégorie(catégorie: String): void
+  +trierParPriorité(): void
+}
+
+EmailReader "1" -- "*" Email: récupère
+EmailReader --> EmailData: transforme
+ServiceIA --> EmailSynthèse: génère
+InterfaceUtilisateur --> EmailSynthèse: affiche
+
+@enduml

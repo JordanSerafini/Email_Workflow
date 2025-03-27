@@ -1,0 +1,219 @@
+@startuml email_sender
+title Workflow d'Envoi d'Email depuis WhatsApp Vocal
+
+' Diagramme d'activité
+skinparam backgroundColor white
+skinparam activityBorderColor black
+skinparam activityBackgroundColor LightSkyBlue
+
+|#LightBlue|WhatsApp|
+start
+:Réception d'un message vocal;
+:Extraction de l'audio;
+:Transfert du fichier audio;
+
+|#LightGreen|Service de Reconnaissance Vocale|
+:Conversion de l'audio en texte;
+:Identification des commandes clés;
+:Structuration de la demande;
+
+|#PaleGreen|Service IA|
+:Analyse de la demande;
+:Extraction des éléments d'email
+(destinataire, sujet, contenu);
+:Rédaction du brouillon d'email;
+
+|#Gold|Service de Validation|
+:Présentation du brouillon d'email;
+:Attente de confirmation/modification;
+
+|#LightSalmon|Système d'Envoi d'Email|
+:Préparation du message final;
+:Connexion au serveur SMTP;
+:Envoi de l'email;
+:Confirmation d'envoi;
+
+|#LightBlue|WhatsApp|
+:Notification de l'envoi réussi;
+stop
+
+@enduml
+
+@startuml email_sender_sequence
+title Workflow d'Envoi d'Email depuis WhatsApp Vocal - Séquence
+
+actor Utilisateur as User
+participant "WhatsApp" as WA
+participant "Service de\nReconnaissance Vocale" as STT
+participant "Service IA" as AI
+participant "Service de\nValidation" as Valid
+participant "Système d'Envoi\nd'Email" as Mail
+
+User -> WA: Envoie message vocal
+activate WA
+WA -> WA: Capture et traitement audio
+WA -> STT: Transmet fichier audio
+deactivate WA
+
+activate STT
+STT -> STT: Conversion audio en texte
+STT -> STT: Extraction des intentions
+STT -> AI: Transmet texte et intentions
+deactivate STT
+
+activate AI
+AI -> AI: Analyse de la demande
+AI -> AI: Identification destinataire
+AI -> AI: Génération du sujet
+AI -> AI: Rédaction du contenu
+AI -> Valid: Transmet brouillon d'email
+deactivate AI
+
+activate Valid
+Valid -> WA: Envoie brouillon pour validation
+activate WA
+WA -> User: Présente brouillon d'email
+User -> WA: Approuve ou modifie
+WA -> Valid: Transmet réponse
+deactivate WA
+Valid -> Mail: Transmet email approuvé
+deactivate Valid
+
+activate Mail
+Mail -> Mail: Préparation final de l'email
+Mail -> Mail: Connexion au serveur SMTP
+Mail -> Mail: Envoi de l'email
+Mail -> WA: Notifie envoi réussi
+deactivate Mail
+
+activate WA
+WA -> User: Confirme envoi de l'email
+deactivate WA
+
+@enduml
+
+@startuml email_sender_class
+title Modèle de Classes du Système d'Envoi d'Email depuis WhatsApp
+
+class GestionnaireWhatsApp {
+  -apiKey: String
+  -numéroTéléphone: String
+  +recevoirMessage(): Message
+  +extraireAudio(message: Message): FichierAudio
+  +envoyerMessage(contenu: String): boolean
+  +présenterBrouillon(email: Email): boolean
+  +recevoirRéponse(): Réponse
+}
+
+class Message {
+  -id: String
+  -type: MessageType
+  -contenu: Object
+  -expéditeur: String
+  -horodatage: DateTime
+  +estVocal(): boolean
+  +récupérerContenu(): Object
+}
+
+enum MessageType {
+  TEXTE
+  AUDIO
+  IMAGE
+  DOCUMENT
+  CONTACT
+}
+
+class FichierAudio {
+  -id: String
+  -durée: int
+  -taille: int
+  -format: String
+  -données: byte[]
+  +convertirEnBase64(): String
+}
+
+class ServiceReconnaissanceVocale {
+  -fournisseur: String
+  -paramètres: Map<String, Object>
+  +convertirAudioEnTexte(audio: FichierAudio): String
+  +extraireCommandes(texte: String): CommandeEmail
+}
+
+class CommandeEmail {
+  -texteOriginal: String
+  -intention: String
+  -destinataire: String
+  -sujet: String
+  -contenu: String
+  -priorité: String
+  +estValide(): boolean
+}
+
+class ServiceIA {
+  -modèle: String
+  -clé: String
+  +analyserCommande(commande: CommandeEmail): Email
+  +rédigerEmail(commande: CommandeEmail): String
+}
+
+class ServiceValidation {
+  +présenterBrouillon(email: Email): boolean
+  +recevoirConfirmation(): boolean
+  +appliquerModifications(modifications: String): Email
+}
+
+class SystèmeEnvoiEmail {
+  -serveurSMTP: String
+  -port: int
+  -identifiants: Credentials
+  +connecter(): boolean
+  +envoyerEmail(email: Email): boolean
+  +confirmerEnvoi(email: Email): String
+}
+
+class Email {
+  -id: String
+  -expéditeur: String
+  -destinataires: List<String>
+  -cc: List<String>
+  -sujet: String
+  -corpsTexte: String
+  -corpsHTML: String
+  -pièceJointes: List<PièceJointe>
+  +formatPrêtPourEnvoi(): boolean
+}
+
+class Réponse {
+  -typeRéponse: TypeRéponse
+  -contenu: String
+  -modifications: Map<String, String>
+  +estApprobation(): boolean
+  +récupérerModifications(): Map<String, String>
+}
+
+enum TypeRéponse {
+  APPROBATION
+  MODIFICATION
+  ANNULATION
+}
+
+GestionnaireWhatsApp -- Message: traite
+GestionnaireWhatsApp -- FichierAudio: extrait
+GestionnaireWhatsApp -- Réponse: reçoit
+
+Message "1" -- "1" MessageType: a comme type
+
+ServiceReconnaissanceVocale -- FichierAudio: traite
+ServiceReconnaissanceVocale --> CommandeEmail: génère
+
+ServiceIA -- CommandeEmail: analyse
+ServiceIA --> Email: génère
+
+ServiceValidation -- Email: présente
+ServiceValidation -- Réponse: traite
+
+SystèmeEnvoiEmail -- Email: envoie
+
+Réponse "1" -- "1" TypeRéponse: a comme type
+
+@enduml

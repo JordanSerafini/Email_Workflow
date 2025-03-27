@@ -1,0 +1,25 @@
+@startuml classify_workflow
+title Workflow de Classification des Emails
+
+|#AntiqueWhite|Système Email|
+start
+:Connexion à la boîte mail;
+:Récupération des emails;
+
+|#LightBlue|Système de Fichiers|
+:Vérification des dossiers de classification;
+if (Dossiers existants?) then (non)
+  :Création des dossiers manquants;
+endif
+
+|#LightGreen|Service IA|
+:Envoi de l'email à l'IA;
+:Analyse et classification de l'email
+(facture, client, fournisseur, spam);
+
+|#AntiqueWhite|Système Email|
+:Déplacement de l'email 
+vers le dossier correspondant;
+stop
+
+@enduml
