@@ -1,0 +1,63 @@
+@startuml email_use_cases
+
+title Cas d'Utilisation - Automatisation des Emails en Entreprise
+
+actor "Utilisateur" as user
+actor "Client" as client
+actor "Fournisseur" as vendor
+actor "Service Comptable" as accounting
+actor "Service Client" as support
+
+rectangle "Système d'Automatisation des Emails" {
+  usecase "Traitement des Factures" as UC1
+  usecase "Classification des Emails" as UC2
+  usecase "Gestion des Demandes Clients" as UC3
+  usecase "Suivi des Commandes" as UC4
+  usecase "Détection des Emails Urgents" as UC5
+  usecase "Réponses Automatiques" as UC6
+  usecase "Archivage Intelligent" as UC7
+  usecase "Extraction de Rendez-vous" as UC8
+  usecase "Suivi des Délais de Paiement" as UC9
+  usecase "Analyse des Sentiments" as UC10
+}
+
+user --> UC1
+user --> UC2
+user --> UC7
+user --> UC8
+
+client --> UC3
+client --> UC4
+client --> UC6
+
+vendor --> UC1
+vendor --> UC9
+
+accounting --> UC1
+accounting --> UC9
+
+support --> UC3
+support --> UC5
+support --> UC10
+
+note right of UC1 : Extraire et traiter les informations des factures
+
+note right of UC2 : Classer les emails par catégorie,\nprioritaire et département
+
+note right of UC3 : Analyser les demandes et les\ndiriger vers le bon service
+
+note right of UC4 : Extraire les informations de suivi\ndes commandes et mettre à jour les systèmes
+
+note right of UC5 : Identifier les emails nécessitant\nune attention immédiate
+
+note right of UC6 : Générer des réponses automatiques\npour les questions fréquentes
+
+note right of UC7 : Archiver les emails selon des règles\nprédéfinies et les rendre facilement recherchables
+
+note right of UC8 : Extraire les rendez-vous et les ajouter\nautomatiquement au calendrier
+
+note right of UC9 : Surveiller les échéances de paiement\net envoyer des rappels automatiques
+
+note right of UC10 : Analyser le ton des emails clients\npour identifier leur satisfaction
+
+@enduml 
