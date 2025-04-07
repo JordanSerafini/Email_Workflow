@@ -7,20 +7,23 @@ import {
 } from '@nestjs/common';
 import { AppService } from './model.service';
 
+interface ModelRequest {
+  query: string;
+}
+
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
   @Post('model')
-  async callModel(@Body() query: string): Promise<string> {
+  async callModel(@Body() body: ModelRequest): Promise<string> {
     try {
-      return await this.appService.callModel(query);
-    } catch (error) {
+      return await this.appService.callModel(body.query);
+    } catch (error: unknown) {
       console.error(error);
-      throw new HttpException(
-        'Error calling model',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      const errorMessage =
+        error instanceof Error ? error.message : 'Internal server error';
+      throw new HttpException(errorMessage, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 }
