@@ -1,0 +1,10 @@
+services:
+  model_service:
+    build:
+      context: ./Backend/model_service
+      dockerfile: Dockerfile
+    ports:
+      - 3001:3001
+    environment:
+      - MODEL_URL=${MODEL_URL}
+    
