@@ -613,7 +613,7 @@ export class AnalyzeEmailService {
     `;
 
     const response = await this.openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-3.5-turbo',
       messages: [
         {
           role: 'system',
@@ -735,6 +735,14 @@ export class AnalyzeEmailService {
     });
 
     // Générer un résumé global avec OpenAI
+    
+    // Obtenir la date du jour au format JJ/MM/AAAA
+    const today = new Date();
+    const day = today.getDate().toString().padStart(2, '0');
+    const month = (today.getMonth() + 1).toString().padStart(2, '0');
+    const year = today.getFullYear();
+    const formattedDate = `${day}/${month}/${year}`;
+    
     const summaryPrompt = `
     Résumer cet ensemble de ${totalEmails} emails:
     
@@ -745,21 +753,35 @@ export class AnalyzeEmailService {
        Sujet: ${email.subject}
        Priorité: ${email.analysis?.priority || 'non analysé'}
        Catégorie: ${email.analysis?.category || 'non catégorisé'}
-       Résumé: ${email.analysis?.summary || 'non résumé'}`,
+       Résumé: ${email.analysis?.summary || 'non résumé'}
+       Dossier: ${email.folderPath || 'non spécifié'}`,
       )
       .join('\n\n')}
     
-    Produire un résumé général concis (3-4 phrases maximum) qui donne un aperçu des principaux sujets, des priorités et des actions nécessaires.
+    Formater votre réponse EXACTEMENT comme ceci:
+
+    "Voici le résumé de vos mails lus et non lus d'aujourd'hui : ${formattedDate}
+
+    **[SUJET EMAIL 1] - [EXPÉDITEUR] :**
+    [Description concise de 1-2 phrases sur le contenu essentiel]
+
+    **[SUJET EMAIL 2] - [EXPÉDITEUR] :**
+    [Description concise de 1-2 phrases sur le contenu essentiel]"
+
+    Continue pour tous les emails importants. Ne pas produire de résumé général, seulement ce format précis. 
+    Liste d'abord les emails haute priorité, puis les emails professionnels, puis les autres.
+    Limiter à une ou deux phrases MAXIMUM par email.
+    Mentionner des détails spécifiques comme heures, dates, montants quand disponibles.
     `;
 
     try {
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-3.5-turbo',
         messages: [
           {
             role: 'system',
             content:
-              'Tu es un assistant qui résume efficacement les emails pour un professionnel occupé. Sois concis et direct.',
+              "Tu es un assistant qui produit des résumés concis et directs des emails. Tu utilises EXACTEMENT le format demandé par l'utilisateur dans les instructions, sans aucune introduction ni conclusion.",
           },
           { role: 'user', content: summaryPrompt },
         ],
@@ -853,7 +875,7 @@ export class AnalyzeEmailService {
 
     try {
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-3.5-turbo',
         messages: [
           {
             role: 'system',
@@ -944,7 +966,7 @@ export class AnalyzeEmailService {
 
     try {
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-3.5-turbo',
         messages: [
           {
             role: 'system',
