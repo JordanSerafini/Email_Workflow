@@ -271,7 +271,7 @@ export class AnalyzeEmailService {
       // Obtient la date d'aujourd'hui au format IMAP
       const today = new Date();
       today.setHours(0, 0, 0, 0); // Début de la journée
-      
+
       const day = today.getDate().toString().padStart(2, '0');
       const month = [
         'Jan',
@@ -373,19 +373,21 @@ export class AnalyzeEmailService {
             Promise.all(emailPromises)
               .then((allEmails) => {
                 // Filtrer les emails par date (aujourd'hui uniquement)
-                const todayEmails = allEmails.filter(email => {
+                const todayEmails = allEmails.filter((email) => {
                   if (!email.date) return false;
-                  
+
                   const emailDate = new Date(email.date);
                   emailDate.setHours(0, 0, 0, 0); // Début de la journée
-                  
+
                   const todayDate = new Date();
                   todayDate.setHours(0, 0, 0, 0); // Début de la journée
-                  
+
                   return emailDate.getTime() === todayDate.getTime();
                 });
-                
-                this.logger.log(`Récupération terminée. Filtrage: ${allEmails.length} emails récupérés, ${todayEmails.length} emails d'aujourd'hui.`);
+
+                this.logger.log(
+                  `Récupération terminée. Filtrage: ${allEmails.length} emails récupérés, ${todayEmails.length} emails d'aujourd'hui.`,
+                );
                 resolve(todayEmails);
               })
               .catch((error) => reject(error));
@@ -410,15 +412,15 @@ export class AnalyzeEmailService {
    */
   async analyzeEmails(emails: EmailContent[]): Promise<EmailContent[]> {
     this.logger.log(`Début de l'analyse de ${emails.length} emails`);
-    
+
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
 
     // Traiter les emails par lots pour éviter de surcharger l'API
     const analyzedEmails = await this.processEmailsInBatches(emails);
-    
+
     // Calculer le total des tokens utilisés
-    analyzedEmails.forEach(email => {
+    analyzedEmails.forEach((email) => {
       if (email.analysis?.tokensUsed) {
         totalInputTokens += email.analysis.tokensUsed.input;
         totalOutputTokens += email.analysis.tokensUsed.output;
@@ -435,16 +437,22 @@ export class AnalyzeEmailService {
    * Traite les emails par lots pour éviter de surcharger l'API OpenAI
    * @param emails Liste des emails à traiter
    */
-  private async processEmailsInBatches(emails: EmailContent[]): Promise<EmailContent[]> {
-    this.logger.log(`Traitement des emails par lots: ${emails.length} emails au total, ${BATCH_SIZE} emails par lot`);
-    
+  private async processEmailsInBatches(
+    emails: EmailContent[],
+  ): Promise<EmailContent[]> {
+    this.logger.log(
+      `Traitement des emails par lots: ${emails.length} emails au total, ${BATCH_SIZE} emails par lot`,
+    );
+
     const analyzedEmails: EmailContent[] = [];
-    
+
     // Diviser les emails en lots
     for (let i = 0; i < emails.length; i += BATCH_SIZE) {
       const batch = emails.slice(i, i + BATCH_SIZE);
-      this.logger.log(`Traitement du lot ${i/BATCH_SIZE + 1}/${Math.ceil(emails.length/BATCH_SIZE)} (${batch.length} emails)`);
-      
+      this.logger.log(
+        `Traitement du lot ${i / BATCH_SIZE + 1}/${Math.ceil(emails.length / BATCH_SIZE)} (${batch.length} emails)`,
+      );
+
       // Analyser le lot d'emails
       const batchResults = await Promise.all(
         batch.map(async (email) => {
@@ -462,17 +470,19 @@ export class AnalyzeEmailService {
           }
         }),
       );
-      
+
       // Ajouter les résultats du lot au tableau global
       analyzedEmails.push(...batchResults);
-      
+
       // Si ce n'est pas le dernier lot, attendre avant de continuer
       if (i + BATCH_SIZE < emails.length) {
-        this.logger.log(`Attente de ${BATCH_DELAY_MS/1000} secondes avant le prochain lot...`);
-        await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
+        this.logger.log(
+          `Attente de ${BATCH_DELAY_MS / 1000} secondes avant le prochain lot...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY_MS));
       }
     }
-    
+
     return analyzedEmails;
   }
 
@@ -542,7 +552,9 @@ export class AnalyzeEmailService {
       total: response.usage?.total_tokens || 0,
     };
 
-    this.logger.debug(`Tokens utilisés pour l'analyse: ${tokensUsed.total} (entrée: ${tokensUsed.input}, sortie: ${tokensUsed.output})`);
+    this.logger.debug(
+      `Tokens utilisés pour l'analyse: ${tokensUsed.total} (entrée: ${tokensUsed.input}, sortie: ${tokensUsed.output})`,
+    );
 
     try {
       const content = response.choices[0].message.content;
@@ -555,7 +567,7 @@ export class AnalyzeEmailService {
       const jsonString = jsonMatch ? jsonMatch[0] : content;
 
       const parsedResult = JSON.parse(jsonString);
-      
+
       // Ajouter les informations sur les tokens utilisés
       return {
         ...parsedResult,
@@ -681,7 +693,9 @@ export class AnalyzeEmailService {
         total: response.usage?.total_tokens || 0,
       };
 
-      this.logger.debug(`Tokens utilisés pour le résumé global: ${tokensUsed.total} (entrée: ${tokensUsed.input}, sortie: ${tokensUsed.output})`);
+      this.logger.debug(
+        `Tokens utilisés pour le résumé global: ${tokensUsed.total} (entrée: ${tokensUsed.input}, sortie: ${tokensUsed.output})`,
+      );
 
       const summary =
         response.choices[0].message.content ||
@@ -730,7 +744,9 @@ export class AnalyzeEmailService {
       total: number;
     };
   }> {
-    this.logger.debug(`Génération d'une réponse pour l'email: ${email.subject}`);
+    this.logger.debug(
+      `Génération d'une réponse pour l'email: ${email.subject}`,
+    );
 
     // Préparer le contenu pour la génération de réponse
     const prompt = `
@@ -761,7 +777,8 @@ export class AnalyzeEmailService {
         messages: [
           {
             role: 'system',
-            content: "Tu es un assistant professionnel expert en rédaction d'emails. Tu réponds de manière concise, claire et adaptée au contexte professionnel.",
+            content:
+              "Tu es un assistant professionnel expert en rédaction d'emails. Tu réponds de manière concise, claire et adaptée au contexte professionnel.",
           },
           { role: 'user', content: prompt },
         ],
@@ -775,9 +792,13 @@ export class AnalyzeEmailService {
         total: response.usage?.total_tokens || 0,
       };
 
-      this.logger.debug(`Tokens utilisés pour la génération de réponse: ${tokensUsed.total} (entrée: ${tokensUsed.input}, sortie: ${tokensUsed.output})`);
+      this.logger.debug(
+        `Tokens utilisés pour la génération de réponse: ${tokensUsed.total} (entrée: ${tokensUsed.input}, sortie: ${tokensUsed.output})`,
+      );
 
-      const draftResponse = response.choices[0].message.content || 'Impossible de générer une réponse.';
+      const draftResponse =
+        response.choices[0].message.content ||
+        'Impossible de générer une réponse.';
       return {
         response: draftResponse,
         tokensUsed,
@@ -787,7 +808,8 @@ export class AnalyzeEmailService {
         `Erreur lors de la génération de la réponse à l'email: ${error.message}`,
       );
       return {
-        response: 'Impossible de générer une réponse à cet email. Veuillez essayer ultérieurement.',
+        response:
+          'Impossible de générer une réponse à cet email. Veuillez essayer ultérieurement.',
         tokensUsed: {
           input: 0,
           output: 0,
@@ -815,7 +837,9 @@ export class AnalyzeEmailService {
       total: number;
     };
   }> {
-    this.logger.debug(`Reformulation de la réponse pour l'email: ${email.subject}`);
+    this.logger.debug(
+      `Reformulation de la réponse pour l'email: ${email.subject}`,
+    );
 
     // Préparer le contenu pour la reformulation
     const prompt = `
@@ -844,7 +868,8 @@ export class AnalyzeEmailService {
         messages: [
           {
             role: 'system',
-            content: "Tu es un rédacteur professionnel expert en communication par email. Tu améliores les réponses en respectant les instructions spécifiques tout en conservant le message d'origine.",
+            content:
+              "Tu es un rédacteur professionnel expert en communication par email. Tu améliores les réponses en respectant les instructions spécifiques tout en conservant le message d'origine.",
           },
           { role: 'user', content: prompt },
         ],
@@ -858,9 +883,13 @@ export class AnalyzeEmailService {
         total: response.usage?.total_tokens || 0,
       };
 
-      this.logger.debug(`Tokens utilisés pour la reformulation: ${tokensUsed.total} (entrée: ${tokensUsed.input}, sortie: ${tokensUsed.output})`);
+      this.logger.debug(
+        `Tokens utilisés pour la reformulation: ${tokensUsed.total} (entrée: ${tokensUsed.input}, sortie: ${tokensUsed.output})`,
+      );
 
-      const rewrittenResponse = response.choices[0].message.content || 'Impossible de reformuler la réponse.';
+      const rewrittenResponse =
+        response.choices[0].message.content ||
+        'Impossible de reformuler la réponse.';
       return {
         response: rewrittenResponse,
         tokensUsed,
@@ -870,7 +899,8 @@ export class AnalyzeEmailService {
         `Erreur lors de la reformulation de la réponse: ${error.message}`,
       );
       return {
-        response: 'Impossible de reformuler la réponse. Veuillez essayer ultérieurement.',
+        response:
+          'Impossible de reformuler la réponse. Veuillez essayer ultérieurement.',
         tokensUsed: {
           input: 0,
           output: 0,
@@ -915,77 +945,91 @@ export class AnalyzeEmailService {
 
       // Structurer le résumé pour une présentation professionnelle
       let formattedSummary = `📋 RÉSUMÉ PROFESSIONNEL\n\n`;
-      
+
       // Statistiques globales
       formattedSummary += `🔍 Aperçu général:\n`;
       formattedSummary += `• Total emails: ${summaryData.totalEmails}\n`;
       formattedSummary += `• Emails haute priorité: ${summaryData.highPriorityCount}\n`;
       formattedSummary += `• Actions requises: ${summaryData.actionRequiredCount}\n\n`;
-      
+
       // Répartition par catégories professionnelles
       formattedSummary += `📊 Répartition par catégories:\n`;
       if (summaryData.categoryCounts) {
         // Afficher les catégories professionnelles prioritaires
         if (summaryData.categoryCounts.professionnel)
           formattedSummary += `• Professionnels: ${summaryData.categoryCounts.professionnel}\n`;
-        
+
         if (summaryData.categoryCounts.facture)
           formattedSummary += `• Factures: ${summaryData.categoryCounts.facture}\n`;
-        
+
         if (summaryData.categoryCounts.marketing)
           formattedSummary += `• Marketing: ${summaryData.categoryCounts.marketing}\n`;
-        
+
         // Autres catégories
         Object.entries(summaryData.categoryCounts)
-          .filter(([key]) => !['professionnel', 'facture', 'marketing', 'personnel'].includes(key))
+          .filter(
+            ([key]) =>
+              !['professionnel', 'facture', 'marketing', 'personnel'].includes(
+                key,
+              ),
+          )
           .forEach(([key, count]) => {
             formattedSummary += `• ${key.charAt(0).toUpperCase() + key.slice(1)}: ${count}\n`;
           });
       }
-      
+
       // Actions à entreprendre
       if (summaryData.actionItems && summaryData.actionItems.length > 0) {
         formattedSummary += `\n⚡ Actions requises:\n`;
-        
+
         // Regrouper les tâches par catégorie professionnelle
-        const professionalTasks = summaryData.actionItems
-          .filter(item => !item.toLowerCase().includes('facebook') && 
-                          !item.toLowerCase().includes('personnel'));
-        
+        const professionalTasks = summaryData.actionItems.filter(
+          (item) =>
+            !item.toLowerCase().includes('facebook') &&
+            !item.toLowerCase().includes('personnel'),
+        );
+
         professionalTasks.forEach((item, index) => {
           formattedSummary += `${index + 1}. ${item}\n`;
         });
       }
-      
+
       // Emails haute priorité professionnels
-      if (summaryData.topPriorityEmails && summaryData.topPriorityEmails.length > 0) {
-        const professionalHighPriority = summaryData.topPriorityEmails
-          .filter(email => email.analysis?.category === 'professionnel' || 
-                           email.analysis?.category === 'facture');
-        
+      if (
+        summaryData.topPriorityEmails &&
+        summaryData.topPriorityEmails.length > 0
+      ) {
+        const professionalHighPriority = summaryData.topPriorityEmails.filter(
+          (email) =>
+            email.analysis?.category === 'professionnel' ||
+            email.analysis?.category === 'facture',
+        );
+
         if (professionalHighPriority.length > 0) {
           formattedSummary += `\n🔴 Emails professionnels prioritaires:\n`;
-          professionalHighPriority.forEach(email => {
+          professionalHighPriority.forEach((email) => {
             formattedSummary += `• ${email.subject} - ${email.analysis?.summary}\n`;
           });
         }
       }
-      
+
       // Résumé général
       formattedSummary += `\n📝 Résumé général:\n${summaryData.summary}`;
-      
+
       // Informations sur les tokens utilisés pour les analyses
       formattedSummary += `\n\n🔄 Statistiques d'utilisation API:\n`;
       formattedSummary += `• Tokens entrée: ${initialTokensUsed.input}\n`;
       formattedSummary += `• Tokens sortie: ${initialTokensUsed.output}\n`;
       formattedSummary += `• Tokens total: ${initialTokensUsed.total}\n`;
-      
+
       return {
         formattedSummary,
         tokensUsed: initialTokensUsed,
       };
     } catch (error) {
-      this.logger.error(`Erreur lors du formatage professionnel du résumé: ${error.message}`);
+      this.logger.error(
+        `Erreur lors du formatage professionnel du résumé: ${error.message}`,
+      );
       return {
         formattedSummary: 'Impossible de générer le résumé professionnel',
         tokensUsed: {
