@@ -1,5 +1,5 @@
 {
-  "name": "embedding_service",
+  "name": "email_service_openai",
   "version": "0.0.1",
   "description": "",
   "author": "",
@@ -21,8 +21,13 @@
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
+    "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
+    "dotenv": "^16.5.0",
+    "mailparser": "^3.7.2",
+    "node-imap": "^0.9.6",
+    "openai": "^4.97.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
   },

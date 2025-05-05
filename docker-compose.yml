@@ -1,11 +1,24 @@
 services:
-  model_service:
+  # model_service:
+  #   build:
+  #     context: ./Backend/model_service
+  #     dockerfile: Dockerfile
+  #   container_name: model_service
+  #   ports:
+  #     - 3001:3001
+  #   environment:
+  #     - MODEL_URL=${MODEL_URL}
+
+  email_service_openai:
     build:
-      context: ./Backend/model_service
+      context: ./Backend/email_service_openai
       dockerfile: Dockerfile
-    container_name: model_service
+    container_name: email_service_openai
     ports:
-      - 3001:3001
+      - 3002:3002
     environment:
-      - MODEL_URL=${MODEL_URL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - EMAIL_SERVICE_URL=${EMAIL_SERVICE_URL}
+      - EMAIL_SERVICE_PORT=${EMAIL_SERVICE_PORT}
+
 

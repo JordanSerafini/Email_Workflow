@@ -1,3 +1,98 @@
+# Service de Tri d'Emails avec OpenAI
+
+Ce service permet de trier automatiquement les emails d'une boîte mail en utilisant l'intelligence artificielle d'OpenAI.
+
+## Fonctionnalités
+
+- Connexion à une boîte mail via IMAP
+- Récupération des emails non lus
+- Analyse du contenu des emails avec l'API OpenAI
+- Classification des emails en différentes catégories
+- Déplacement des emails dans des dossiers correspondant à leur catégorie
+- **Nouveau**: Analyse automatique des factures pour extraction de données structurées
+
+## Configuration
+
+Le service utilise des variables d'environnement pour la configuration. Créez un fichier `.env` à la racine du projet avec les informations suivantes:
+
+```env
+# Configuration du serveur
+PORT=3002
+
+# Configuration de l'API OpenAI
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Configuration de la boîte mail
+EMAIL_USER=your_email@example.com
+EMAIL_PASSWORD=your_email_password
+EMAIL_HOST=imap.example.com
+EMAIL_PORT=993
+EMAIL_TLS=true
+
+# Catégories pour le tri des emails
+EMAIL_CATEGORIES=Urgent,Important,Newsletter,Spam,Commercial,Personnel,Professionnel,Factures,Autre
+```
+
+## Installation
+
+```bash
+# Installer les dépendances
+npm install
+
+# Démarrer en mode développement
+npm run start:dev
+
+# Démarrer en mode production
+npm run build
+npm run start:prod
+```
+
+## Utilisation
+
+Le service expose les endpoints suivants:
+
+### Vérifier le statut du service
+
+```http
+GET /sort-email/status
+```
+
+### Trier les emails
+
+```http
+POST /sort-email/sort
+```
+
+Cette requête va:
+
+1. Se connecter à la boîte mail
+2. Récupérer les emails non lus
+3. Les analyser avec OpenAI
+4. Les classer dans différentes catégories
+5. Les déplacer dans les dossiers correspondants
+
+La réponse contient des statistiques sur le nombre d'emails triés par catégorie.
+
+### Analyser les factures
+
+```http
+POST /sort-email/analyze-invoices
+```
+
+Cette requête va:
+
+1. Trier tous les emails non lus
+2. Identifier ceux qui sont classés comme "Factures"
+3. Extraire les informations structurées de chaque facture (montant, date, numéro, émetteur)
+4. Retourner les données analysées au format JSON
+
+## Dépendances principales
+
+- NestJS: Framework backend
+- OpenAI: API d'intelligence artificielle pour l'analyse de texte
+- node-imap: Connexion aux serveurs de messagerie via IMAP
+- mailparser: Parser d'emails
+
 <p align="center">
   <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
 </p>
