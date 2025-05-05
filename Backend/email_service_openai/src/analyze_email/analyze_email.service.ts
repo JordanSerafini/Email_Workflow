@@ -140,7 +140,7 @@ export class AnalyzeEmailService {
 
       const emails = await new Promise<EmailContent[]>((resolve, reject) => {
         this.imap.search(
-          ['UNSEEN', ['ON', searchDate]],
+          ['UNSEEN', 'ON', searchDate],
           (searchErr: any, results: any[]) => {
             if (searchErr) {
               this.logger.error(

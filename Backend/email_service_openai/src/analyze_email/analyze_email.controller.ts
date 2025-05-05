@@ -176,6 +176,167 @@ export class AnalyzeEmailController {
   }
 
   /**
+   * Récupère et analyse tous les emails du jour (lus et non lus)
+   * @param mailbox Nom de la boîte aux lettres à analyser (optionnel, par défaut: INBOX)
+   * @param summary Si true, inclut un résumé général des emails (optionnel, par défaut: false)
+   */
+  @Get('today/all')
+  async analyzeAllTodayEmails(
+    @Query('mailbox') mailbox?: string,
+    @Query('summary') summary?: string,
+  ): Promise<{
+    status: string;
+    message: string;
+    data: EmailContent[];
+    summary?: {
+      overview: string;
+      totalEmails: number;
+      highPriorityCount: number;
+      actionRequiredCount: number;
+      categoryCounts: Record<string, number>;
+      topPriorityEmails: EmailContent[];
+      actionItems: string[];
+    };
+  }> {
+    try {
+      this.logger.log(
+        `Début de l'analyse de tous les emails d'aujourd'hui${mailbox ? ` dans ${mailbox}` : ''}`,
+      );
+
+      // Récupération de tous les emails du jour (lus et non lus)
+      const todayEmails =
+        await this.analyzeEmailService.getAllTodayEmails(mailbox);
+
+      if (todayEmails.length === 0) {
+        return {
+          status: 'success',
+          message: `Aucun email trouvé pour aujourd'hui${mailbox ? ` dans ${mailbox}` : ''}`,
+          data: [],
+        };
+      }
+
+      // Analyse des emails récupérés
+      const analyzedEmails =
+        await this.analyzeEmailService.analyzeEmails(todayEmails);
+
+      // Si résumé demandé, générer un résumé global
+      if (summary === 'true') {
+        const overallSummary =
+          await this.analyzeEmailService.generateOverallSummary(analyzedEmails);
+
+        return {
+          status: 'success',
+          message: `${analyzedEmails.length} emails analysés avec succès`,
+          data: analyzedEmails,
+          summary: {
+            overview: overallSummary.summary,
+            totalEmails: overallSummary.totalEmails,
+            highPriorityCount: overallSummary.highPriorityCount,
+            actionRequiredCount: overallSummary.actionRequiredCount,
+            categoryCounts: overallSummary.categoryCounts,
+            topPriorityEmails: overallSummary.topPriorityEmails,
+            actionItems: overallSummary.actionItems,
+          },
+        };
+      }
+
+      return {
+        status: 'success',
+        message: `${analyzedEmails.length} emails analysés avec succès`,
+        data: analyzedEmails,
+      };
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(`Erreur lors de l'analyse des emails: ${errorMessage}`);
+      throw new HttpException(
+        {
+          status: 'error',
+          message: `Erreur lors de l'analyse des emails: ${errorMessage}`,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * Endpoint dédié au résumé global de tous les emails d'aujourd'hui (lus et non lus)
+   * @param mailbox Nom de la boîte aux lettres à analyser (optionnel, par défaut: INBOX)
+   */
+  @Get('today/all/summary')
+  async getAllTodayEmailsSummary(@Query('mailbox') mailbox?: string): Promise<{
+    status: string;
+    message: string;
+    summary: {
+      overview: string;
+      totalEmails: number;
+      highPriorityCount: number;
+      actionRequiredCount: number;
+      categoryCounts: Record<string, number>;
+      topPriorityEmails: EmailContent[];
+      actionItems: string[];
+    };
+  }> {
+    try {
+      this.logger.log(
+        `Génération du résumé de tous les emails d'aujourd'hui${mailbox ? ` dans ${mailbox}` : ''}`,
+      );
+
+      // Récupération et analyse des emails
+      const todayEmails =
+        await this.analyzeEmailService.getAllTodayEmails(mailbox);
+
+      if (todayEmails.length === 0) {
+        return {
+          status: 'success',
+          message: `Aucun email trouvé pour aujourd'hui${mailbox ? ` dans ${mailbox}` : ''}`,
+          summary: {
+            overview: 'Aucun email à analyser',
+            totalEmails: 0,
+            highPriorityCount: 0,
+            actionRequiredCount: 0,
+            categoryCounts: {},
+            topPriorityEmails: [],
+            actionItems: [],
+          },
+        };
+      }
+
+      const analyzedEmails =
+        await this.analyzeEmailService.analyzeEmails(todayEmails);
+      const overallSummary =
+        await this.analyzeEmailService.generateOverallSummary(analyzedEmails);
+
+      return {
+        status: 'success',
+        message: `Résumé généré pour ${analyzedEmails.length} emails`,
+        summary: {
+          overview: overallSummary.summary,
+          totalEmails: overallSummary.totalEmails,
+          highPriorityCount: overallSummary.highPriorityCount,
+          actionRequiredCount: overallSummary.actionRequiredCount,
+          categoryCounts: overallSummary.categoryCounts,
+          topPriorityEmails: overallSummary.topPriorityEmails,
+          actionItems: overallSummary.actionItems,
+        },
+      };
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Erreur lors de la génération du résumé: ${errorMessage}`,
+      );
+      throw new HttpException(
+        {
+          status: 'error',
+          message: `Erreur lors de la génération du résumé: ${errorMessage}`,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
    * Vérification de la santé du service d'analyse
    */
   @Get('health')
