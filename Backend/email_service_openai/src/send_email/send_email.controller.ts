@@ -62,7 +62,7 @@ export class SendEmailController {
             to: result.originalEmail.to,
             subject: result.originalEmail.subject,
             date: result.originalEmail.date,
-            text: result.originalEmail.text,
+            body: result.originalEmail.body,
             analysis: result.originalEmail.analysis,
           },
         },
