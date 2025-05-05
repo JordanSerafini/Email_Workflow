@@ -28,9 +28,7 @@ export class SendEmailController {
     @Query('mailbox') mailbox: string = 'INBOX',
   ) {
     try {
-      this.logger.log(
-        `Génération d'une réponse pour l'email ${emailId} dans ${mailbox}`,
-      );
+      this.logger.log(`Génération d'une réponse pour l'email ${emailId}`);
 
       const result = await this.sendEmailService.generateResponseForEmail(
         mailbox,
@@ -45,18 +43,28 @@ export class SendEmailController {
         };
       }
 
+      // Extraire la réponse si c'est un objet avec des informations de tokens
+      const responseData = typeof result.draftResponse === 'string'
+        ? { draftResponse: result.draftResponse }
+        : { 
+            draftResponse: result.draftResponse.response,
+            tokensUsed: result.draftResponse.tokensUsed
+          };
+
       return {
         status: 'success',
         message: 'Brouillon de réponse généré avec succès',
         data: {
+          ...responseData,
           originalEmail: {
             id: result.originalEmail.id,
             from: result.originalEmail.from,
             to: result.originalEmail.to,
             subject: result.originalEmail.subject,
             date: result.originalEmail.date,
+            text: result.originalEmail.text,
+            analysis: result.originalEmail.analysis,
           },
-          draftResponse: result.draftResponse,
         },
       };
     } catch (error: unknown) {
@@ -104,12 +112,18 @@ export class SendEmailController {
         requestBody.instructions,
       );
 
+      // Extraire la réponse si c'est un objet avec informations de tokens
+      const responseData = typeof rewrittenResponse === 'string'
+        ? { rewrittenResponse }
+        : { 
+          rewrittenResponse: rewrittenResponse.response,
+          tokensUsed: rewrittenResponse.tokensUsed,
+        };
+
       return {
         status: 'success',
         message: 'Réponse reformulée avec succès',
-        data: {
-          rewrittenResponse,
-        },
+        data: responseData,
       };
     } catch (error: unknown) {
       const errorMessage =
@@ -208,16 +222,23 @@ export class SendEmailController {
         finalResponse = await this.sendEmailService.rewriteResponse(
           mailbox,
           emailId,
-          draftResult.draftResponse,
+          typeof draftResult.draftResponse === 'string'
+            ? draftResult.draftResponse
+            : draftResult.draftResponse.response,
           requestBody.customInstructions,
         );
       }
+
+      // Extraire le texte de la réponse finale si c'est un objet
+      const responseText = typeof finalResponse === 'string'
+        ? finalResponse
+        : finalResponse.response;
 
       // Envoyer la réponse
       const sendResult = await this.sendEmailService.sendEmailResponse(
         mailbox,
         emailId,
-        finalResponse,
+        responseText,
         requestBody.customSubject,
       );
 
@@ -225,7 +246,7 @@ export class SendEmailController {
         status: sendResult.success ? 'success' : 'error',
         message: sendResult.message,
         data: {
-          responseText: finalResponse,
+          responseText: responseText,
         },
       };
     } catch (error: unknown) {

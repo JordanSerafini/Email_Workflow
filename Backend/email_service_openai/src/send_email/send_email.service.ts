@@ -69,7 +69,8 @@ export class SendEmailService {
     emailId: string,
   ): Promise<{
     originalEmail: EmailContent | null;
-    draftResponse: string;
+    draftResponse: string 
+      | { response: string; tokensUsed: { input: number; output: number; total: number; }; };
   }> {
     try {
       // Récupérer l'email original
@@ -115,7 +116,10 @@ export class SendEmailService {
     emailId: string,
     draftResponse: string,
     instructions: string,
-  ): Promise<string> {
+  ): Promise<
+    string 
+    | { response: string; tokensUsed: { input: number; output: number; total: number; }; }
+  > {
     try {
       // Récupérer l'email original
       const email = await this.getEmailById(mailbox, emailId);

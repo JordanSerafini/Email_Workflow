@@ -18,6 +18,11 @@ export interface EmailContent {
     category: string;
     actionRequired: boolean;
     actionItems?: string[];
+    tokensUsed?: {
+      input: number;
+      output: number;
+      total: number;
+    };
   };
 }
 
@@ -401,11 +406,21 @@ export class AnalyzeEmailService {
    */
   async analyzeEmails(emails: EmailContent[]): Promise<EmailContent[]> {
     this.logger.log(`Début de l'analyse de ${emails.length} emails`);
+    
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
 
     const analyzedEmails = await Promise.all(
       emails.map(async (email) => {
         try {
           const analysisResult = await this.analyzeEmailContent(email);
+          
+          // Agréger les tokens
+          if (analysisResult.tokensUsed) {
+            totalInputTokens += analysisResult.tokensUsed.input;
+            totalOutputTokens += analysisResult.tokensUsed.output;
+          }
+          
           return {
             ...email,
             analysis: analysisResult,
@@ -419,7 +434,7 @@ export class AnalyzeEmailService {
       }),
     );
 
-    this.logger.log(`Analyse terminée pour ${emails.length} emails`);
+    this.logger.log(`Analyse terminée pour ${emails.length} emails. Tokens utilisés: ${totalInputTokens} (entrée), ${totalOutputTokens} (sortie)`);
     return analyzedEmails;
   }
 
@@ -432,6 +447,11 @@ export class AnalyzeEmailService {
     category: string;
     actionRequired: boolean;
     actionItems?: string[];
+    tokensUsed?: {
+      input: number;
+      output: number;
+      total: number;
+    };
   }> {
     this.logger.debug(`Analyse de l'email: ${email.subject}`);
 
@@ -459,7 +479,7 @@ export class AnalyzeEmailService {
     - Pour les confirmations de rendez-vous/réunions: suggérer "Confirmer le rendez-vous" ou "Ajouter à l'agenda" 
     - Éviter les actions génériques qui ne découlent pas directement du contenu de l'email
     - Si l'email nécessite une réponse, ajouter l'action "Répondre à cet email"
-    - Pour les demandes d'information, les questions ou les requêtes: suggérer "Répondre à cet email"
+    - Toujours Suggérer "Répondre à cet email"
     
     Réponse au format JSON strict avec les clés: summary, priority, category, actionRequired, actionItems (si applicable)
     `;
@@ -470,12 +490,21 @@ export class AnalyzeEmailService {
         {
           role: 'system',
           content:
-            "Tu es un assistant spécialisé dans l'analyse d'emails. Réponds uniquement au format JSON sans aucun autre texte.",
+            "Tu es un assistant spécialisé dans l'analyse d'emails. Réponds uniquement au format JSON sans aucun autre texte ni délimiteur markdown.",
         },
         { role: 'user', content: prompt },
       ],
       temperature: 0.3,
     });
+
+    // Extraire les informations sur les tokens
+    const tokensUsed = {
+      input: response.usage?.prompt_tokens || 0,
+      output: response.usage?.completion_tokens || 0,
+      total: response.usage?.total_tokens || 0,
+    };
+
+    this.logger.debug(`Tokens utilisés pour l'analyse: ${tokensUsed.total} (entrée: ${tokensUsed.input}, sortie: ${tokensUsed.output})`);
 
     try {
       const content = response.choices[0].message.content;
@@ -487,7 +516,13 @@ export class AnalyzeEmailService {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       const jsonString = jsonMatch ? jsonMatch[0] : content;
 
-      return JSON.parse(jsonString);
+      const parsedResult = JSON.parse(jsonString);
+      
+      // Ajouter les informations sur les tokens utilisés
+      return {
+        ...parsedResult,
+        tokensUsed,
+      };
     } catch (error: any) {
       this.logger.error(
         `Erreur lors du parsing de la réponse OpenAI: ${error.message}`,
@@ -497,6 +532,7 @@ export class AnalyzeEmailService {
         priority: 'medium',
         category: 'autre',
         actionRequired: false,
+        tokensUsed,
       };
     }
   }
@@ -512,6 +548,11 @@ export class AnalyzeEmailService {
     categoryCounts: Record<string, number>;
     topPriorityEmails: EmailContent[];
     actionItems: string[];
+    tokensUsed?: {
+      input: number;
+      output: number;
+      total: number;
+    };
   }> {
     if (analyzedEmails.length === 0) {
       return {
@@ -522,6 +563,11 @@ export class AnalyzeEmailService {
         categoryCounts: {},
         topPriorityEmails: [],
         actionItems: [],
+        tokensUsed: {
+          input: 0,
+          output: 0,
+          total: 0,
+        },
       };
     }
 
@@ -590,6 +636,15 @@ export class AnalyzeEmailService {
         temperature: 0.3,
       });
 
+      // Extraire les informations sur les tokens
+      const tokensUsed = {
+        input: response.usage?.prompt_tokens || 0,
+        output: response.usage?.completion_tokens || 0,
+        total: response.usage?.total_tokens || 0,
+      };
+
+      this.logger.debug(`Tokens utilisés pour le résumé global: ${tokensUsed.total} (entrée: ${tokensUsed.input}, sortie: ${tokensUsed.output})`);
+
       const summary =
         response.choices[0].message.content ||
         'Impossible de générer un résumé';
@@ -602,6 +657,7 @@ export class AnalyzeEmailService {
         categoryCounts,
         topPriorityEmails: highPriorityEmails.slice(0, 3), // Top 3 emails prioritaires
         actionItems: allActionItems.slice(0, 5), // Top 5 actions à effectuer
+        tokensUsed,
       };
     } catch (error: any) {
       this.logger.error(
@@ -615,6 +671,11 @@ export class AnalyzeEmailService {
         categoryCounts,
         topPriorityEmails: highPriorityEmails.slice(0, 3),
         actionItems: allActionItems.slice(0, 5),
+        tokensUsed: {
+          input: 0,
+          output: 0,
+          total: 0,
+        },
       };
     }
   }
@@ -623,7 +684,14 @@ export class AnalyzeEmailService {
    * Génère un brouillon de réponse pour un email donné
    * @param email Email pour lequel générer une réponse
    */
-  async generateEmailResponse(email: EmailContent): Promise<string> {
+  async generateEmailResponse(email: EmailContent): Promise<{
+    response: string;
+    tokensUsed: {
+      input: number;
+      output: number;
+      total: number;
+    };
+  }> {
     this.logger.debug(`Génération d'une réponse pour l'email: ${email.subject}`);
 
     // Préparer le contenu pour la génération de réponse
@@ -655,20 +723,39 @@ export class AnalyzeEmailService {
         messages: [
           {
             role: 'system',
-            content: 'Tu es un assistant professionnel expert en rédaction d\'emails. Tu réponds de manière concise, claire et adaptée au contexte professionnel.',
+            content: "Tu es un assistant professionnel expert en rédaction d'emails. Tu réponds de manière concise, claire et adaptée au contexte professionnel.",
           },
           { role: 'user', content: prompt },
         ],
         temperature: 0.7,
       });
 
+      // Extraire les informations sur les tokens
+      const tokensUsed = {
+        input: response.usage?.prompt_tokens || 0,
+        output: response.usage?.completion_tokens || 0,
+        total: response.usage?.total_tokens || 0,
+      };
+
+      this.logger.debug(`Tokens utilisés pour la génération de réponse: ${tokensUsed.total} (entrée: ${tokensUsed.input}, sortie: ${tokensUsed.output})`);
+
       const draftResponse = response.choices[0].message.content || 'Impossible de générer une réponse.';
-      return draftResponse;
+      return {
+        response: draftResponse,
+        tokensUsed,
+      };
     } catch (error: any) {
       this.logger.error(
         `Erreur lors de la génération de la réponse à l'email: ${error.message}`,
       );
-      return 'Impossible de générer une réponse à cet email. Veuillez essayer ultérieurement.';
+      return {
+        response: 'Impossible de générer une réponse à cet email. Veuillez essayer ultérieurement.',
+        tokensUsed: {
+          input: 0,
+          output: 0,
+          total: 0,
+        },
+      };
     }
   }
 
@@ -682,7 +769,14 @@ export class AnalyzeEmailService {
     email: EmailContent, 
     draftResponse: string, 
     instructions: string
-  ): Promise<string> {
+  ): Promise<{
+    response: string;
+    tokensUsed: {
+      input: number;
+      output: number;
+      total: number;
+    };
+  }> {
     this.logger.debug(`Reformulation de la réponse pour l'email: ${email.subject}`);
 
     // Préparer le contenu pour la reformulation
@@ -712,20 +806,156 @@ export class AnalyzeEmailService {
         messages: [
           {
             role: 'system',
-            content: 'Tu es un rédacteur professionnel expert en communication par email. Tu améliores les réponses en respectant les instructions spécifiques tout en conservant le message d\'origine.',
+            content: "Tu es un rédacteur professionnel expert en communication par email. Tu améliores les réponses en respectant les instructions spécifiques tout en conservant le message d'origine.",
           },
           { role: 'user', content: prompt },
         ],
         temperature: 0.7,
       });
 
+      // Extraire les informations sur les tokens
+      const tokensUsed = {
+        input: response.usage?.prompt_tokens || 0,
+        output: response.usage?.completion_tokens || 0,
+        total: response.usage?.total_tokens || 0,
+      };
+
+      this.logger.debug(`Tokens utilisés pour la reformulation: ${tokensUsed.total} (entrée: ${tokensUsed.input}, sortie: ${tokensUsed.output})`);
+
       const rewrittenResponse = response.choices[0].message.content || 'Impossible de reformuler la réponse.';
-      return rewrittenResponse;
+      return {
+        response: rewrittenResponse,
+        tokensUsed,
+      };
     } catch (error: any) {
       this.logger.error(
         `Erreur lors de la reformulation de la réponse: ${error.message}`,
       );
-      return 'Impossible de reformuler la réponse. Veuillez essayer ultérieurement.';
+      return {
+        response: 'Impossible de reformuler la réponse. Veuillez essayer ultérieurement.',
+        tokensUsed: {
+          input: 0,
+          output: 0,
+          total: 0,
+        },
+      };
+    }
+  }
+
+  /**
+   * Formate le résumé en un format professionnel structuré
+   * @param summaryData Données du résumé à formater
+   */
+  async formatProfessionalSummary(summaryData: {
+    summary: string;
+    totalEmails: number;
+    highPriorityCount: number;
+    actionRequiredCount: number;
+    categoryCounts: Record<string, number>;
+    topPriorityEmails: EmailContent[];
+    actionItems: string[];
+    tokensUsed?: {
+      input: number;
+      output: number;
+      total: number;
+    };
+  }): Promise<{
+    formattedSummary: string;
+    tokensUsed: {
+      input: number;
+      output: number;
+      total: number;
+    };
+  }> {
+    try {
+      // Récupérer les tokens utilisés pour la génération du résumé initial
+      const initialTokensUsed = summaryData.tokensUsed || {
+        input: 0,
+        output: 0,
+        total: 0,
+      };
+
+      // Structurer le résumé pour une présentation professionnelle
+      let formattedSummary = `📋 RÉSUMÉ PROFESSIONNEL\n\n`;
+      
+      // Statistiques globales
+      formattedSummary += `🔍 Aperçu général:\n`;
+      formattedSummary += `• Total emails: ${summaryData.totalEmails}\n`;
+      formattedSummary += `• Emails haute priorité: ${summaryData.highPriorityCount}\n`;
+      formattedSummary += `• Actions requises: ${summaryData.actionRequiredCount}\n\n`;
+      
+      // Répartition par catégories professionnelles
+      formattedSummary += `📊 Répartition par catégories:\n`;
+      if (summaryData.categoryCounts) {
+        // Afficher les catégories professionnelles prioritaires
+        if (summaryData.categoryCounts.professionnel)
+          formattedSummary += `• Professionnels: ${summaryData.categoryCounts.professionnel}\n`;
+        
+        if (summaryData.categoryCounts.facture)
+          formattedSummary += `• Factures: ${summaryData.categoryCounts.facture}\n`;
+        
+        if (summaryData.categoryCounts.marketing)
+          formattedSummary += `• Marketing: ${summaryData.categoryCounts.marketing}\n`;
+        
+        // Autres catégories
+        Object.entries(summaryData.categoryCounts)
+          .filter(([key]) => !['professionnel', 'facture', 'marketing', 'personnel'].includes(key))
+          .forEach(([key, count]) => {
+            formattedSummary += `• ${key.charAt(0).toUpperCase() + key.slice(1)}: ${count}\n`;
+          });
+      }
+      
+      // Actions à entreprendre
+      if (summaryData.actionItems && summaryData.actionItems.length > 0) {
+        formattedSummary += `\n⚡ Actions requises:\n`;
+        
+        // Regrouper les tâches par catégorie professionnelle
+        const professionalTasks = summaryData.actionItems
+          .filter(item => !item.toLowerCase().includes('facebook') && 
+                          !item.toLowerCase().includes('personnel'));
+        
+        professionalTasks.forEach((item, index) => {
+          formattedSummary += `${index + 1}. ${item}\n`;
+        });
+      }
+      
+      // Emails haute priorité professionnels
+      if (summaryData.topPriorityEmails && summaryData.topPriorityEmails.length > 0) {
+        const professionalHighPriority = summaryData.topPriorityEmails
+          .filter(email => email.analysis?.category === 'professionnel' || 
+                           email.analysis?.category === 'facture');
+        
+        if (professionalHighPriority.length > 0) {
+          formattedSummary += `\n🔴 Emails professionnels prioritaires:\n`;
+          professionalHighPriority.forEach(email => {
+            formattedSummary += `• ${email.subject} - ${email.analysis?.summary}\n`;
+          });
+        }
+      }
+      
+      // Résumé général
+      formattedSummary += `\n📝 Résumé général:\n${summaryData.summary}`;
+      
+      // Informations sur les tokens utilisés pour les analyses
+      formattedSummary += `\n\n🔄 Statistiques d'utilisation API:\n`;
+      formattedSummary += `• Tokens entrée: ${initialTokensUsed.input}\n`;
+      formattedSummary += `• Tokens sortie: ${initialTokensUsed.output}\n`;
+      formattedSummary += `• Tokens total: ${initialTokensUsed.total}\n`;
+      
+      return {
+        formattedSummary,
+        tokensUsed: initialTokensUsed,
+      };
+    } catch (error) {
+      this.logger.error(`Erreur lors du formatage professionnel du résumé: ${error.message}`);
+      return {
+        formattedSummary: 'Impossible de générer le résumé professionnel',
+        tokensUsed: {
+          input: 0,
+          output: 0,
+          total: 0,
+        },
+      };
     }
   }
 }

@@ -4,6 +4,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 import OpenAI from 'openai';
 
+interface AnalysisResult {
+  [key: string]: any;
+  tokensUsed?: {
+    input: number;
+    output: number;
+    total: number;
+  };
+}
+
 @Injectable()
 export class InvoiceParserService {
   private readonly openai: OpenAI;
@@ -146,6 +155,11 @@ export class InvoiceParserService {
       }
 
       let response;
+      let tokensUsed = {
+        input: 0,
+        output: 0,
+        total: 0,
+      };
 
       if (isImageAnalysis && filePath) {
         console.log(
@@ -195,6 +209,15 @@ export class InvoiceParserService {
         );
       }
 
+      // Extraire les informations sur les tokens
+      tokensUsed = {
+        input: response.usage?.prompt_tokens || 0,
+        output: response.usage?.completion_tokens || 0,
+        total: response.usage?.total_tokens || 0,
+      };
+
+      console.log(`[InvoiceParser] Tokens utilisés: entrée=${tokensUsed.input}, sortie=${tokensUsed.output}, total=${tokensUsed.total}`);
+
       // Récupérer le contenu JSON de la réponse
       const jsonContent = response.choices[0].message.content || '';
       console.log(
@@ -210,20 +233,36 @@ export class InvoiceParserService {
           console.log(`[InvoiceParser] Tentative de parsing JSON...`);
           const parsedJson = JSON.parse(cleanedJsonContent);
           console.log(`[InvoiceParser] JSON parsé avec succès`);
-          return parsedJson;
+          
+          // Ajouter les informations sur les tokens utilisés
+          return {
+            ...parsedJson,
+            tokensUsed
+          };
         } else {
           console.log(`[InvoiceParser] Réponse vide de l'API OpenAI`);
-          return { error: "Réponse vide de l'API OpenAI" };
+          return { 
+            error: "Réponse vide de l'API OpenAI",
+            tokensUsed
+          };
         }
       } catch (parseError) {
         console.error(`Erreur lors du parsing JSON: ${parseError.message}`);
         // Renvoyer le texte brut si le parsing échoue
-        return { rawResponse: cleanedJsonContent };
+        return { 
+          rawResponse: cleanedJsonContent,
+          tokensUsed
+        };
       }
     } catch (error) {
       console.error(`Erreur lors de l'analyse OpenAI: ${error.message}`);
       return {
         error: `Erreur lors de l'analyse de la facture: ${error.message}`,
+        tokensUsed: {
+          input: 0,
+          output: 0,
+          total: 0,
+        }
       };
     }
   }
@@ -404,6 +443,11 @@ export class InvoiceParserService {
         filename,
         data: analysisResult,
         success: !analysisResult.error,
+        tokensUsed: analysisResult.tokensUsed || {
+          input: 0,
+          output: 0,
+          total: 0,
+        }
       };
     } catch (error) {
       console.error(
@@ -413,6 +457,11 @@ export class InvoiceParserService {
         filename,
         error: error.message,
         success: false,
+        tokensUsed: {
+          input: 0,
+          output: 0,
+          total: 0,
+        }
       };
     }
   }
@@ -430,6 +479,11 @@ export class InvoiceParserService {
           {
             message: 'Aucune facture PDF trouvée dans le dossier',
             success: false,
+            tokensUsed: {
+              input: 0,
+              output: 0,
+              total: 0,
+            }
           },
         ];
       }
@@ -439,13 +493,46 @@ export class InvoiceParserService {
         pdfFiles.map((file) => this.processInvoice(file)),
       );
 
-      return results;
+      // Calculer les statistiques d'utilisation des tokens
+      const totalTokensUsed = {
+        input: 0,
+        output: 0,
+        total: 0,
+      };
+
+      results.forEach(result => {
+        if (result.tokensUsed) {
+          totalTokensUsed.input += result.tokensUsed.input;
+          totalTokensUsed.output += result.tokensUsed.output;
+          totalTokensUsed.total += result.tokensUsed.total;
+        }
+      });
+
+      console.log(`[InvoiceParser] Total des tokens utilisés: entrée=${totalTokensUsed.input}, sortie=${totalTokensUsed.output}, total=${totalTokensUsed.total}`);
+
+      // Ajouter les statistiques d'utilisation des tokens au résumé global
+      const summaryWithTokens = {
+        totalFiles: pdfFiles.length,
+        successfulAnalyses: results.filter(r => r.success).length,
+        failedAnalyses: results.filter(r => !r.success).length,
+        tokensUsed: totalTokensUsed,
+      };
+
+      return [
+        summaryWithTokens,
+        ...results
+      ];
     } catch (error) {
       console.error(`Erreur lors du traitement des factures: ${error.message}`);
       return [
         {
           error: `Impossible de traiter les factures: ${error.message}`,
           success: false,
+          tokensUsed: {
+            input: 0,
+            output: 0,
+            total: 0,
+          }
         },
       ];
     }

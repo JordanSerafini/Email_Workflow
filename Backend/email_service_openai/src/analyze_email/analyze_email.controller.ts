@@ -35,6 +35,16 @@ export class AnalyzeEmailController {
       categoryCounts: Record<string, number>;
       topPriorityEmails: EmailContent[];
       actionItems: string[];
+      tokensUsed?: {
+        input: number;
+        output: number;
+        total: number;
+      };
+    };
+    tokensUsed?: {
+      input: number;
+      output: number;
+      total: number;
     };
   }> {
     try {
@@ -63,6 +73,22 @@ export class AnalyzeEmailController {
         const overallSummary =
           await this.analyzeEmailService.generateOverallSummary(analyzedEmails);
 
+        // Calculer le total des tokens utilisés (analyse d'emails + résumé)
+        const totalTokensUsed = {
+          input: overallSummary.tokensUsed?.input || 0,
+          output: overallSummary.tokensUsed?.output || 0,
+          total: overallSummary.tokensUsed?.total || 0,
+        };
+
+        // Ajouter les tokens utilisés par l'analyse individuelle des emails
+        analyzedEmails.forEach(email => {
+          if (email.analysis?.tokensUsed) {
+            totalTokensUsed.input += email.analysis.tokensUsed.input;
+            totalTokensUsed.output += email.analysis.tokensUsed.output;
+            totalTokensUsed.total += email.analysis.tokensUsed.total;
+          }
+        });
+
         return {
           status: 'success',
           message: `${analyzedEmails.length} emails non lus analysés avec succès`,
@@ -75,14 +101,32 @@ export class AnalyzeEmailController {
             categoryCounts: overallSummary.categoryCounts,
             topPriorityEmails: overallSummary.topPriorityEmails,
             actionItems: overallSummary.actionItems,
+            tokensUsed: overallSummary.tokensUsed,
           },
+          tokensUsed: totalTokensUsed,
         };
       }
+
+      // Calculer le total des tokens utilisés pour l'analyse des emails
+      const totalTokensUsed = {
+        input: 0,
+        output: 0,
+        total: 0,
+      };
+
+      analyzedEmails.forEach(email => {
+        if (email.analysis?.tokensUsed) {
+          totalTokensUsed.input += email.analysis.tokensUsed.input;
+          totalTokensUsed.output += email.analysis.tokensUsed.output;
+          totalTokensUsed.total += email.analysis.tokensUsed.total;
+        }
+      });
 
       return {
         status: 'success',
         message: `${analyzedEmails.length} emails non lus analysés avec succès`,
         data: analyzedEmails,
+        tokensUsed: totalTokensUsed,
       };
     } catch (error: unknown) {
       const errorMessage =
@@ -114,6 +158,16 @@ export class AnalyzeEmailController {
       categoryCounts: Record<string, number>;
       topPriorityEmails: EmailContent[];
       actionItems: string[];
+      tokensUsed?: {
+        input: number;
+        output: number;
+        total: number;
+      };
+    };
+    tokensUsed?: {
+      input: number;
+      output: number;
+      total: number;
     };
   }> {
     try {
@@ -146,6 +200,22 @@ export class AnalyzeEmailController {
       const overallSummary =
         await this.analyzeEmailService.generateOverallSummary(analyzedEmails);
 
+      // Calculer le total des tokens utilisés (analyse d'emails + résumé)
+      const totalTokensUsed = {
+        input: overallSummary.tokensUsed?.input || 0,
+        output: overallSummary.tokensUsed?.output || 0,
+        total: overallSummary.tokensUsed?.total || 0,
+      };
+
+      // Ajouter les tokens utilisés par l'analyse individuelle des emails
+      analyzedEmails.forEach(email => {
+        if (email.analysis?.tokensUsed) {
+          totalTokensUsed.input += email.analysis.tokensUsed.input;
+          totalTokensUsed.output += email.analysis.tokensUsed.output;
+          totalTokensUsed.total += email.analysis.tokensUsed.total;
+        }
+      });
+
       return {
         status: 'success',
         message: `Résumé généré pour ${analyzedEmails.length} emails non lus`,
@@ -157,7 +227,9 @@ export class AnalyzeEmailController {
           categoryCounts: overallSummary.categoryCounts,
           topPriorityEmails: overallSummary.topPriorityEmails,
           actionItems: overallSummary.actionItems,
+          tokensUsed: overallSummary.tokensUsed,
         },
+        tokensUsed: totalTokensUsed,
       };
     } catch (error: unknown) {
       const errorMessage =
@@ -337,6 +409,164 @@ export class AnalyzeEmailController {
   }
 
   /**
+   * Endpoint dédié au résumé professionnel des emails (format structuré)
+   * @param mailbox Nom de la boîte aux lettres à analyser (optionnel, par défaut: INBOX)
+   */
+  @Get('professional-summary')
+  async getProfessionalSummary(@Query('mailbox') mailbox?: string): Promise<{
+    status: string;
+    message: string;
+    professionalSummary: string;
+    tokensUsed: {
+      input: number;
+      output: number;
+      total: number;
+    };
+  }> {
+    try {
+      this.logger.log(
+        `Génération du résumé professionnel des emails non lus${mailbox ? ` dans ${mailbox}` : ''}`,
+      );
+
+      // Récupération et analyse des emails
+      const emails = await this.analyzeEmailService.getTodayEmails(mailbox);
+
+      if (emails.length === 0) {
+        return {
+          status: 'success',
+          message: `Aucun email non lu trouvé${mailbox ? ` dans ${mailbox}` : ''}`,
+          professionalSummary: 'Aucun email à analyser',
+          tokensUsed: {
+            input: 0,
+            output: 0,
+            total: 0
+          }
+        };
+      }
+
+      const analyzedEmails = await this.analyzeEmailService.analyzeEmails(emails);
+      const overallSummary = await this.analyzeEmailService.generateOverallSummary(analyzedEmails);
+      
+      // Utiliser le nouveau format professionnel
+      const professionalSummaryResult = await this.analyzeEmailService.formatProfessionalSummary(overallSummary);
+
+      // Calculer le total des tokens utilisés (analyse d'emails + résumé + format professionnel)
+      const totalTokensUsed = {
+        input: professionalSummaryResult.tokensUsed.input,
+        output: professionalSummaryResult.tokensUsed.output,
+        total: professionalSummaryResult.tokensUsed.total,
+      };
+
+      // Ajouter les tokens utilisés par l'analyse individuelle des emails
+      analyzedEmails.forEach(email => {
+        if (email.analysis?.tokensUsed) {
+          totalTokensUsed.input += email.analysis.tokensUsed.input;
+          totalTokensUsed.output += email.analysis.tokensUsed.output;
+          totalTokensUsed.total += email.analysis.tokensUsed.total;
+        }
+      });
+
+      return {
+        status: 'success',
+        message: `Résumé professionnel généré pour ${analyzedEmails.length} emails non lus`,
+        professionalSummary: professionalSummaryResult.formattedSummary,
+        tokensUsed: totalTokensUsed,
+      };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Erreur lors de la génération du résumé professionnel: ${errorMessage}`,
+      );
+      throw new HttpException(
+        {
+          status: 'error',
+          message: `Erreur lors de la génération du résumé professionnel: ${errorMessage}`,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+  
+  /**
+   * Endpoint dédié au résumé professionnel de tous les emails (lus et non lus)
+   * @param mailbox Nom de la boîte aux lettres à analyser (optionnel, par défaut: INBOX)
+   */
+  @Get('professional-summary/all')
+  async getAllProfessionalSummary(@Query('mailbox') mailbox?: string): Promise<{
+    status: string;
+    message: string;
+    professionalSummary: string;
+    tokensUsed: {
+      input: number;
+      output: number;
+      total: number;
+    };
+  }> {
+    try {
+      this.logger.log(
+        `Génération du résumé professionnel de tous les emails${mailbox ? ` dans ${mailbox}` : ''}`,
+      );
+
+      // Récupération et analyse des emails
+      const emails = await this.analyzeEmailService.getAllTodayEmails(mailbox);
+
+      if (emails.length === 0) {
+        return {
+          status: 'success',
+          message: `Aucun email trouvé${mailbox ? ` dans ${mailbox}` : ''}`,
+          professionalSummary: 'Aucun email à analyser',
+          tokensUsed: {
+            input: 0,
+            output: 0,
+            total: 0
+          }
+        };
+      }
+
+      const analyzedEmails = await this.analyzeEmailService.analyzeEmails(emails);
+      const overallSummary = await this.analyzeEmailService.generateOverallSummary(analyzedEmails);
+      
+      // Utiliser le nouveau format professionnel
+      const professionalSummaryResult = await this.analyzeEmailService.formatProfessionalSummary(overallSummary);
+
+      // Calculer le total des tokens utilisés (analyse d'emails + résumé + format professionnel)
+      const totalTokensUsed = {
+        input: professionalSummaryResult.tokensUsed.input,
+        output: professionalSummaryResult.tokensUsed.output,
+        total: professionalSummaryResult.tokensUsed.total,
+      };
+
+      // Ajouter les tokens utilisés par l'analyse individuelle des emails
+      analyzedEmails.forEach(email => {
+        if (email.analysis?.tokensUsed) {
+          totalTokensUsed.input += email.analysis.tokensUsed.input;
+          totalTokensUsed.output += email.analysis.tokensUsed.output;
+          totalTokensUsed.total += email.analysis.tokensUsed.total;
+        }
+      });
+
+      return {
+        status: 'success',
+        message: `Résumé professionnel généré pour ${analyzedEmails.length} emails (lus et non lus)`,
+        professionalSummary: professionalSummaryResult.formattedSummary,
+        tokensUsed: totalTokensUsed,
+      };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Erreur lors de la génération du résumé professionnel: ${errorMessage}`,
+      );
+      throw new HttpException(
+        {
+          status: 'error',
+          message: `Erreur lors de la génération du résumé professionnel: ${errorMessage}`,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
    * Vérification de la santé du service d'analyse
    */
   @Get('health')
@@ -348,3 +578,4 @@ export class AnalyzeEmailController {
     };
   }
 }
+
