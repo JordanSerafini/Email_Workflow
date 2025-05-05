@@ -1,0 +1,87 @@
+{
+  "fournisseur": {
+    "nom": "Domaine des Saies",
+    "adresse": "82120 MAUROUX",
+    "contact": "+33 51 39 41 17",
+    "email": "contact@domaine-des-saies.com"
+  },
+  "facture": {
+    "numéro": "2021-21396-000009",
+    "date": "17/10/2021",
+    "réservation": "21396 - Séjour du 14/10/2021 au 17/10/2021"
+  },
+  "client": {
+    "nom": "Mme JUSSERIEU Amandine",
+    "adresse": "8 rue du Général de Gaulle, 24100 DOUBOUTS"
+  },
+  "hébergement": {
+    "nom": "gîte La Testeuse",
+    "adresse": "1 rue des Tests, 91000 TESTVILLE"
+  },
+  "produits": [
+    {
+      "description": "Hébergement du Je 14 Oct au Di 17 Oct",
+      "pu_ht": 293.64,
+      "quantité": 1,
+      "tva": "10%",
+      "montant_ht": 293.64,
+      "montant_ttc": 323
+    },
+    {
+      "description": "Supplément animal de compagnie",
+      "pu_ht": 25,
+      "quantité": 1,
+      "tva": "20%",
+      "montant_ht": 25,
+      "montant_ttc": 30
+    },
+    {
+      "description": "Ménage fin de séjour : + prix fixe 90 €",
+      "pu_ht": 75,
+      "quantité": 1,
+      "tva": "20%",
+      "montant_ht": 75,
+      "montant_ttc": 90
+    },
+    {
+      "description": "Chauffage : + qtè: 92 x 0.19 € = 17.48 €",
+      "pu_ht": 0.1727,
+      "quantité": 92,
+      "tva": "10%",
+      "montant_ht": 15.89,
+      "montant_ttc": 17.48
+    },
+    {
+      "description": "Draps de bain",
+      "pu_ht": 20,
+      "quantité": 1,
+      "tva": "20%",
+      "montant_ht": 20,
+      "montant_ttc": 24
+    },
+    {
+      "description": "Taxe de séjour",
+      "pu_ht": 8.1,
+      "quantité": 1,
+      "tva": "0%",
+      "montant_ht": 8.1,
+      "montant_ttc": 8.1
+    }
+  ],
+  "total": {
+    "montant_ht": 437.63,
+    "montant_ttc": 492.58
+  },
+  "récapitulatif_tva": [
+    {
+      "base": 309.53,
+      "taux": "10.00%",
+      "montant": 30.95
+    },
+    {
+      "base": 120,
+      "taux": "20.00%",
+      "montant": 24
+    }
+  ]
+}

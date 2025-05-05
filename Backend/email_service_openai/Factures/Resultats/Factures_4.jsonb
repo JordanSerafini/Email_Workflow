@@ -1,0 +1,57 @@
+{
+  "fournisseur": {
+    "nom": "Dupont Peinture",
+    "adresse": "236 av. de la République, 49800 Trélazé, France"
+  },
+  "client": {
+    "nom": "Test EI",
+    "adresse": "France"
+  },
+  "facture": {
+    "numéro": "FAC-DEMO-2022-001",
+    "date": "04/02/2022",
+    "échéance": "06/03/2022"
+  },
+  "produits": [
+    {
+      "désignation": "Dépose de l'ancienne moquette",
+      "quantité": "30,00 m²",
+      "prix_unitaire": "10,75 €",
+      "total_ht": "322,50 €"
+    },
+    {
+      "désignation": "Cloisons de séparation",
+      "quantité": "8,75 u",
+      "prix_unitaire": "11,34 €",
+      "total_ht": "99,23 €"
+    },
+    {
+      "désignation": "Enlèvement des déchets",
+      "quantité": "1,00 u",
+      "prix_unitaire": "80,00 €",
+      "total_ht": "80,00 €"
+    },
+    {
+      "désignation": "Pose d'un nouveau revêtement de sol spécial restaurant",
+      "quantité": "30,00 m²",
+      "prix_unitaire": "62,00 €",
+      "total_ht": "1 860,00 €"
+    },
+    {
+      "désignation": "Application d'un ragréage",
+      "quantité": "30,00 m²",
+      "prix_unitaire": "12,33 €",
+      "total_ht": "369,90 €"
+    }
+  ],
+  "total_ht": "3 451,63 €",
+  "net_a_payer": "3 451,63 €",
+  "conditions_de_paiement": "Chèque, Espèces",
+  "règlements": [
+    {
+      "mode": "Chèque",
+      "date": "13/04/2023",
+      "montant": "3 451,63 €"
+    }
+  ]
+}

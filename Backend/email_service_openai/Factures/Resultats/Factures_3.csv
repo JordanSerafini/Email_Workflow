@@ -1,0 +1,18 @@
+Fournisseur,Numéro,Date,MontantHT,MontantTTC
+"[object Object]","2021-21396-000009","17/10/2021","",""
+
+Produits:
+Description,Quantité,PrixUnitaireHT,TVA,MontantHT
+"Hébergement du Je 14 Oct au Di 17 Oct","1","","10%","293.64"
+"Supplément animal de compagnie","1","","20%","25"
+"Ménage fin de séjour : + prix fixe 90 €","1","","20%","75"
+"Chauffage : + qtè: 92 x 0.19 € = 17.48 €","92","","10%","15.89"
+"Draps de bain","1","","20%","20"
+"Taxe de séjour","1","","0%","8.1"
+
+Totaux:
+Total HT,
+Total TTC,
+
+Client:
+Nom,"[object Object]"
