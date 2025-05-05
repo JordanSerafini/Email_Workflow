@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { SortEmailModule } from './sort_email/sort_email.module';
 import { InvoiceParserModule } from './invoice_parser/invoice_parser.module';
+import { AnalyzeEmailModule } from './analyze_email/analyze_email.module';
 
 @Module({
   imports: [
@@ -10,6 +11,7 @@ import { InvoiceParserModule } from './invoice_parser/invoice_parser.module';
     }),
     SortEmailModule,
     InvoiceParserModule,
+    AnalyzeEmailModule,
   ],
   controllers: [],
   providers: [],
