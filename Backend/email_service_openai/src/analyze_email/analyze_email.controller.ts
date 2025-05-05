@@ -16,14 +16,10 @@ export class AnalyzeEmailController {
 
   /**
    * Récupère et analyse les emails non lus d'aujourd'hui avec un résumé général
-   * @param mailbox Nom de la boîte aux lettres à analyser (optionnel, par défaut: INBOX)
    * @param summary Si true, inclut un résumé général des emails (optionnel, par défaut: false)
    */
   @Get('today')
-  async analyzeTodayEmails(
-    @Query('mailbox') mailbox?: string,
-    @Query('summary') summary?: string,
-  ): Promise<{
+  async analyzeTodayEmails(@Query('summary') summary?: string): Promise<{
     status: string;
     message: string;
     data: EmailContent[];
@@ -49,17 +45,16 @@ export class AnalyzeEmailController {
   }> {
     try {
       this.logger.log(
-        `Début de l'analyse des emails non lus d'aujourd'hui${mailbox ? ` dans ${mailbox}` : ''}`,
+        `Début de l'analyse des emails non lus d'aujourd'hui dans tous les dossiers`,
       );
 
       // Récupération des emails non lus du jour
-      const todayEmails =
-        await this.analyzeEmailService.getTodayEmails(mailbox);
+      const todayEmails = await this.analyzeEmailService.getTodayEmails();
 
       if (todayEmails.length === 0) {
         return {
           status: 'success',
-          message: `Aucun email non lu trouvé pour aujourd'hui${mailbox ? ` dans ${mailbox}` : ''}`,
+          message: `Aucun email non lu trouvé pour aujourd'hui dans tous les dossiers`,
           data: [],
         };
       }
@@ -81,7 +76,7 @@ export class AnalyzeEmailController {
         };
 
         // Ajouter les tokens utilisés par l'analyse individuelle des emails
-        analyzedEmails.forEach(email => {
+        analyzedEmails.forEach((email) => {
           if (email.analysis?.tokensUsed) {
             totalTokensUsed.input += email.analysis.tokensUsed.input;
             totalTokensUsed.output += email.analysis.tokensUsed.output;
@@ -114,7 +109,7 @@ export class AnalyzeEmailController {
         total: 0,
       };
 
-      analyzedEmails.forEach(email => {
+      analyzedEmails.forEach((email) => {
         if (email.analysis?.tokensUsed) {
           totalTokensUsed.input += email.analysis.tokensUsed.input;
           totalTokensUsed.output += email.analysis.tokensUsed.output;
@@ -144,10 +139,9 @@ export class AnalyzeEmailController {
 
   /**
    * Endpoint dédié au résumé global des emails d'aujourd'hui
-   * @param mailbox Nom de la boîte aux lettres à analyser (optionnel, par défaut: INBOX)
    */
   @Get('today/summary')
-  async getTodayEmailsSummary(@Query('mailbox') mailbox?: string): Promise<{
+  async getTodayEmailsSummary(): Promise<{
     status: string;
     message: string;
     summary: {
@@ -172,17 +166,16 @@ export class AnalyzeEmailController {
   }> {
     try {
       this.logger.log(
-        `Génération du résumé des emails non lus d'aujourd'hui${mailbox ? ` dans ${mailbox}` : ''}`,
+        `Génération du résumé des emails non lus d'aujourd'hui dans tous les dossiers`,
       );
 
       // Récupération et analyse des emails
-      const todayEmails =
-        await this.analyzeEmailService.getTodayEmails(mailbox);
+      const todayEmails = await this.analyzeEmailService.getTodayEmails();
 
       if (todayEmails.length === 0) {
         return {
           status: 'success',
-          message: `Aucun email non lu trouvé pour aujourd'hui${mailbox ? ` dans ${mailbox}` : ''}`,
+          message: `Aucun email non lu trouvé pour aujourd'hui dans tous les dossiers`,
           summary: {
             overview: 'Aucun email à analyser',
             totalEmails: 0,
@@ -208,7 +201,7 @@ export class AnalyzeEmailController {
       };
 
       // Ajouter les tokens utilisés par l'analyse individuelle des emails
-      analyzedEmails.forEach(email => {
+      analyzedEmails.forEach((email) => {
         if (email.analysis?.tokensUsed) {
           totalTokensUsed.input += email.analysis.tokensUsed.input;
           totalTokensUsed.output += email.analysis.tokensUsed.output;
@@ -249,14 +242,10 @@ export class AnalyzeEmailController {
 
   /**
    * Récupère et analyse tous les emails du jour (lus et non lus)
-   * @param mailbox Nom de la boîte aux lettres à analyser (optionnel, par défaut: INBOX)
    * @param summary Si true, inclut un résumé général des emails (optionnel, par défaut: false)
    */
   @Get('today/all')
-  async analyzeAllTodayEmails(
-    @Query('mailbox') mailbox?: string,
-    @Query('summary') summary?: string,
-  ): Promise<{
+  async analyzeAllTodayEmails(@Query('summary') summary?: string): Promise<{
     status: string;
     message: string;
     data: EmailContent[];
@@ -272,17 +261,16 @@ export class AnalyzeEmailController {
   }> {
     try {
       this.logger.log(
-        `Début de l'analyse de tous les emails d'aujourd'hui${mailbox ? ` dans ${mailbox}` : ''}`,
+        `Début de l'analyse de tous les emails d'aujourd'hui dans tous les dossiers`,
       );
 
       // Récupération de tous les emails du jour (lus et non lus)
-      const todayEmails =
-        await this.analyzeEmailService.getAllTodayEmails(mailbox);
+      const todayEmails = await this.analyzeEmailService.getAllTodayEmails();
 
       if (todayEmails.length === 0) {
         return {
           status: 'success',
-          message: `Aucun email trouvé pour aujourd'hui${mailbox ? ` dans ${mailbox}` : ''}`,
+          message: `Aucun email trouvé pour aujourd'hui dans tous les dossiers`,
           data: [],
         };
       }
@@ -333,10 +321,9 @@ export class AnalyzeEmailController {
 
   /**
    * Endpoint dédié au résumé global de tous les emails d'aujourd'hui (lus et non lus)
-   * @param mailbox Nom de la boîte aux lettres à analyser (optionnel, par défaut: INBOX)
    */
   @Get('today/all/summary')
-  async getAllTodayEmailsSummary(@Query('mailbox') mailbox?: string): Promise<{
+  async getAllTodayEmailsSummary(): Promise<{
     status: string;
     message: string;
     summary: {
@@ -351,17 +338,16 @@ export class AnalyzeEmailController {
   }> {
     try {
       this.logger.log(
-        `Génération du résumé de tous les emails d'aujourd'hui${mailbox ? ` dans ${mailbox}` : ''}`,
+        `Génération du résumé de tous les emails d'aujourd'hui dans tous les dossiers`,
       );
 
       // Récupération et analyse des emails
-      const todayEmails =
-        await this.analyzeEmailService.getAllTodayEmails(mailbox);
+      const todayEmails = await this.analyzeEmailService.getAllTodayEmails();
 
       if (todayEmails.length === 0) {
         return {
           status: 'success',
-          message: `Aucun email trouvé pour aujourd'hui${mailbox ? ` dans ${mailbox}` : ''}`,
+          message: `Aucun email trouvé pour aujourd'hui dans tous les dossiers`,
           summary: {
             overview: 'Aucun email à analyser',
             totalEmails: 0,
@@ -410,10 +396,9 @@ export class AnalyzeEmailController {
 
   /**
    * Endpoint dédié au résumé professionnel des emails (format structuré)
-   * @param mailbox Nom de la boîte aux lettres à analyser (optionnel, par défaut: INBOX)
    */
   @Get('professional-summary')
-  async getProfessionalSummary(@Query('mailbox') mailbox?: string): Promise<{
+  async getProfessionalSummary(): Promise<{
     status: string;
     message: string;
     professionalSummary: string;
@@ -425,30 +410,35 @@ export class AnalyzeEmailController {
   }> {
     try {
       this.logger.log(
-        `Génération du résumé professionnel des emails non lus${mailbox ? ` dans ${mailbox}` : ''}`,
+        `Génération du résumé professionnel des emails non lus dans tous les dossiers`,
       );
 
       // Récupération et analyse des emails
-      const emails = await this.analyzeEmailService.getTodayEmails(mailbox);
+      const emails = await this.analyzeEmailService.getTodayEmails();
 
       if (emails.length === 0) {
         return {
           status: 'success',
-          message: `Aucun email non lu trouvé${mailbox ? ` dans ${mailbox}` : ''}`,
+          message: `Aucun email non lu trouvé dans tous les dossiers`,
           professionalSummary: 'Aucun email à analyser',
           tokensUsed: {
             input: 0,
             output: 0,
-            total: 0
-          }
+            total: 0,
+          },
         };
       }
 
-      const analyzedEmails = await this.analyzeEmailService.analyzeEmails(emails);
-      const overallSummary = await this.analyzeEmailService.generateOverallSummary(analyzedEmails);
-      
+      const analyzedEmails =
+        await this.analyzeEmailService.analyzeEmails(emails);
+      const overallSummary =
+        await this.analyzeEmailService.generateOverallSummary(analyzedEmails);
+
       // Utiliser le nouveau format professionnel
-      const professionalSummaryResult = await this.analyzeEmailService.formatProfessionalSummary(overallSummary);
+      const professionalSummaryResult =
+        await this.analyzeEmailService.formatProfessionalSummary(
+          overallSummary,
+        );
 
       // Calculer le total des tokens utilisés (analyse d'emails + résumé + format professionnel)
       const totalTokensUsed = {
@@ -458,7 +448,7 @@ export class AnalyzeEmailController {
       };
 
       // Ajouter les tokens utilisés par l'analyse individuelle des emails
-      analyzedEmails.forEach(email => {
+      analyzedEmails.forEach((email) => {
         if (email.analysis?.tokensUsed) {
           totalTokensUsed.input += email.analysis.tokensUsed.input;
           totalTokensUsed.output += email.analysis.tokensUsed.output;
@@ -473,7 +463,8 @@ export class AnalyzeEmailController {
         tokensUsed: totalTokensUsed,
       };
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       this.logger.error(
         `Erreur lors de la génération du résumé professionnel: ${errorMessage}`,
       );
@@ -486,13 +477,12 @@ export class AnalyzeEmailController {
       );
     }
   }
-  
+
   /**
    * Endpoint dédié au résumé professionnel de tous les emails (lus et non lus)
-   * @param mailbox Nom de la boîte aux lettres à analyser (optionnel, par défaut: INBOX)
    */
   @Get('professional-summary/all')
-  async getAllProfessionalSummary(@Query('mailbox') mailbox?: string): Promise<{
+  async getAllProfessionalSummary(): Promise<{
     status: string;
     message: string;
     professionalSummary: string;
@@ -504,30 +494,35 @@ export class AnalyzeEmailController {
   }> {
     try {
       this.logger.log(
-        `Génération du résumé professionnel de tous les emails${mailbox ? ` dans ${mailbox}` : ''}`,
+        `Génération du résumé professionnel de tous les emails dans tous les dossiers`,
       );
 
       // Récupération et analyse des emails
-      const emails = await this.analyzeEmailService.getAllTodayEmails(mailbox);
+      const emails = await this.analyzeEmailService.getAllTodayEmails();
 
       if (emails.length === 0) {
         return {
           status: 'success',
-          message: `Aucun email trouvé${mailbox ? ` dans ${mailbox}` : ''}`,
+          message: `Aucun email trouvé dans tous les dossiers`,
           professionalSummary: 'Aucun email à analyser',
           tokensUsed: {
             input: 0,
             output: 0,
-            total: 0
-          }
+            total: 0,
+          },
         };
       }
 
-      const analyzedEmails = await this.analyzeEmailService.analyzeEmails(emails);
-      const overallSummary = await this.analyzeEmailService.generateOverallSummary(analyzedEmails);
-      
+      const analyzedEmails =
+        await this.analyzeEmailService.analyzeEmails(emails);
+      const overallSummary =
+        await this.analyzeEmailService.generateOverallSummary(analyzedEmails);
+
       // Utiliser le nouveau format professionnel
-      const professionalSummaryResult = await this.analyzeEmailService.formatProfessionalSummary(overallSummary);
+      const professionalSummaryResult =
+        await this.analyzeEmailService.formatProfessionalSummary(
+          overallSummary,
+        );
 
       // Calculer le total des tokens utilisés (analyse d'emails + résumé + format professionnel)
       const totalTokensUsed = {
@@ -537,7 +532,7 @@ export class AnalyzeEmailController {
       };
 
       // Ajouter les tokens utilisés par l'analyse individuelle des emails
-      analyzedEmails.forEach(email => {
+      analyzedEmails.forEach((email) => {
         if (email.analysis?.tokensUsed) {
           totalTokensUsed.input += email.analysis.tokensUsed.input;
           totalTokensUsed.output += email.analysis.tokensUsed.output;
@@ -552,7 +547,8 @@ export class AnalyzeEmailController {
         tokensUsed: totalTokensUsed,
       };
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       this.logger.error(
         `Erreur lors de la génération du résumé professionnel: ${errorMessage}`,
       );
@@ -578,4 +574,3 @@ export class AnalyzeEmailController {
     };
   }
 }
-

@@ -16,6 +16,7 @@ export interface EmailContent {
   subject: string;
   date: Date;
   body: string;
+  folderPath?: string; // Ajout du chemin du dossier où se trouve l'email
   analysis?: {
     summary: string;
     priority: 'high' | 'medium' | 'low';
@@ -46,6 +47,7 @@ interface TypedImap {
   ): void;
   fetch(source: any, options: any): any;
   end(): void;
+  getBoxes(callback: (err: Error | null, boxes: any) => void): void;
 }
 
 @Injectable()
@@ -100,138 +102,201 @@ export class AnalyzeEmailService {
   }
 
   /**
-   * Récupère les emails non lus d'aujourd'hui
-   * @param mailboxName Nom de la boîte aux lettres à analyser (par défaut: 'INBOX')
+   * Récupère la liste de tous les dossiers disponibles
    */
-  async getTodayEmails(mailboxName: string = 'INBOX'): Promise<EmailContent[]> {
+  private async getAllFolders(): Promise<string[]> {
+    return new Promise<string[]>((resolve, reject) => {
+      this.imap.getBoxes((err: Error | null, boxes: any) => {
+        if (err) {
+          this.logger.error(
+            `Erreur lors de la récupération des dossiers: ${err.message}`,
+          );
+          return reject(
+            new Error(
+              `Erreur lors de la récupération des dossiers: ${err.message}`,
+            ),
+          );
+        }
+
+        // Extraire les noms de dossiers
+        const folderNames = Object.keys(boxes);
+
+        this.logger.log(`Dossiers trouvés: ${folderNames.join(', ')}`);
+        resolve(folderNames);
+      });
+    });
+  }
+
+  /**
+   * Récupère les emails non lus d'aujourd'hui de tous les dossiers
+   */
+  async getTodayEmails(): Promise<EmailContent[]> {
     try {
       await this.connectToImap();
 
-      await new Promise<void>((resolve, reject) => {
-        this.imap.openBox(mailboxName, true, (err: any) => {
-          if (err) {
-            this.logger.error(
-              `Erreur lors de l'ouverture de la boîte ${mailboxName}: ${err.message}`,
-            );
-            return reject(
-              new Error(
-                `Erreur lors de l'ouverture de la boîte ${mailboxName}: ${err.message}`,
-              ),
-            );
-          }
-          resolve();
-        });
-      });
-
-      // Obtient la date d'aujourd'hui au format IMAP
-      const today = new Date();
-      const day = today.getDate().toString().padStart(2, '0');
-      const month = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ][today.getMonth()];
-      const year = today.getFullYear();
-
-      const searchDate = `${day}-${month}-${year}`;
+      // Récupérer tous les dossiers disponibles
+      const folders = await this.getAllFolders();
       this.logger.log(
-        `Recherche des emails non lus dans ${mailboxName} pour la date: ${searchDate}`,
+        `Analyse de ${folders.length} dossiers pour les emails non lus d'aujourd'hui`,
       );
 
-      const emails = await new Promise<EmailContent[]>((resolve, reject) => {
-        this.imap.search(['UNSEEN'], (searchErr: any, results: any[]) => {
-          if (searchErr) {
-            this.logger.error(
-              `Erreur lors de la recherche des emails: ${searchErr.message}`,
-            );
-            return reject(
-              new Error(
-                `Erreur lors de la recherche des emails: ${searchErr.message}`,
-              ),
-            );
-          }
+      const allEmails: EmailContent[] = [];
 
-          if (!results || results.length === 0) {
-            this.logger.log("Aucun email non lu trouvé pour aujourd'hui");
-            return resolve([]);
-          }
-
+      // Parcourir chaque dossier
+      for (const folder of folders) {
+        try {
           this.logger.log(
-            `${results.length} emails non lus trouvés. Chargement du contenu...`,
+            `Recherche des emails non lus dans le dossier: ${folder}`,
           );
 
-          const emailPromises: Promise<EmailContent>[] = [];
-          const fetch = this.imap.fetch(results, {
-            bodies: [''],
-            struct: true,
+          await new Promise<void>((resolve, reject) => {
+            this.imap.openBox(folder, true, (err: any) => {
+              if (err) {
+                this.logger.warn(
+                  `Impossible d'ouvrir le dossier ${folder}: ${err.message}`,
+                );
+                return resolve(); // Continuer avec le dossier suivant
+              }
+              resolve();
+            });
           });
 
-          fetch.on('message', (msg: any, seqno: number) => {
-            const emailPromise = new Promise<EmailContent>(
-              (resolveEmail, rejectEmail) => {
-                const email: Partial<EmailContent> = { id: String(seqno) };
+          // Obtient la date d'aujourd'hui au format IMAP
+          const today = new Date();
+          const day = today.getDate().toString().padStart(2, '0');
+          const month = [
+            'Jan',
+            'Feb',
+            'Mar',
+            'Apr',
+            'May',
+            'Jun',
+            'Jul',
+            'Aug',
+            'Sep',
+            'Oct',
+            'Nov',
+            'Dec',
+          ][today.getMonth()];
+          const year = today.getFullYear();
 
-                msg.on('body', (stream: any) => {
-                  let buffer = '';
-                  stream.on('data', (chunk: any) => {
-                    buffer += chunk.toString('utf8');
-                  });
+          const searchDate = `${day}-${month}-${year}`;
+          this.logger.log(
+            `Recherche des emails non lus dans ${folder} pour la date: ${searchDate}`,
+          );
 
-                  stream.once('end', async () => {
-                    try {
-                      this.logger.debug(
-                        `Parsing du contenu de l'email #${seqno}`,
-                      );
-                      const parsed = await simpleParser(buffer);
+          // Rechercher les emails non lus dans ce dossier
+          const folderEmails = await new Promise<EmailContent[]>(
+            (resolve, reject) => {
+              this.imap.search(['UNSEEN'], (searchErr: any, results: any[]) => {
+                if (searchErr) {
+                  this.logger.error(
+                    `Erreur lors de la recherche des emails dans ${folder}: ${searchErr.message}`,
+                  );
+                  return resolve([]); // Continuer avec le dossier suivant
+                }
 
-                      email.from = parsed.from?.text || '';
-                      email.to = parsed.to?.text || '';
-                      email.subject = parsed.subject || '';
-                      email.date = parsed.date || new Date();
-                      email.body = parsed.text || '';
+                if (!results || results.length === 0) {
+                  this.logger.log(`Aucun email non lu trouvé dans ${folder}`);
+                  return resolve([]);
+                }
 
-                      this.logger.debug(
-                        `Email #${seqno} parsé avec succès: ${email.subject}`,
-                      );
+                this.logger.log(
+                  `${results.length} emails non lus trouvés dans ${folder}. Chargement du contenu...`,
+                );
 
-                      resolveEmail(email as EmailContent);
-                    } catch (e: any) {
-                      this.logger.error(
-                        `Erreur lors du parsing de l'email #${seqno}: ${e.message}`,
-                      );
-                      rejectEmail(
-                        new Error(
-                          `Erreur lors du parsing de l'email #${seqno}: ${e.message}`,
-                        ),
-                      );
-                    }
-                  });
+                const emailPromises: Promise<EmailContent>[] = [];
+                const fetch = this.imap.fetch(results, {
+                  bodies: [''],
+                  struct: true,
                 });
-              },
-            );
 
-            emailPromises.push(emailPromise);
+                fetch.on('message', (msg: any, seqno: number) => {
+                  const emailPromise = new Promise<EmailContent>(
+                    (resolveEmail, rejectEmail) => {
+                      const email: Partial<EmailContent> = {
+                        id: String(seqno),
+                        folderPath: folder,
+                      };
+
+                      msg.on('body', (stream: any) => {
+                        let buffer = '';
+                        stream.on('data', (chunk: any) => {
+                          buffer += chunk.toString('utf8');
+                        });
+
+                        stream.once('end', async () => {
+                          try {
+                            this.logger.debug(
+                              `Parsing du contenu de l'email #${seqno} dans ${folder}`,
+                            );
+                            const parsed = await simpleParser(buffer);
+
+                            email.from = parsed.from?.text || '';
+                            email.to = parsed.to?.text || '';
+                            email.subject = parsed.subject || '';
+                            email.date = parsed.date || new Date();
+                            email.body = parsed.text || '';
+
+                            this.logger.debug(
+                              `Email #${seqno} parsé avec succès: ${email.subject}`,
+                            );
+
+                            resolveEmail(email as EmailContent);
+                          } catch (e: any) {
+                            this.logger.error(
+                              `Erreur lors du parsing de l'email #${seqno}: ${e.message}`,
+                            );
+                            rejectEmail(
+                              new Error(
+                                `Erreur lors du parsing de l'email #${seqno}: ${e.message}`,
+                              ),
+                            );
+                          }
+                        });
+                      });
+                    },
+                  );
+
+                  emailPromises.push(emailPromise);
+                });
+
+                fetch.once('end', () => {
+                  Promise.all(emailPromises)
+                    .then((emails) => resolve(emails))
+                    .catch((error) => reject(error));
+                });
+              });
+            },
+          );
+
+          // Filtrer les emails par date (aujourd'hui uniquement)
+          const todayEmails = folderEmails.filter((email) => {
+            if (!email.date) return false;
+
+            const emailDate = new Date(email.date);
+            emailDate.setHours(0, 0, 0, 0); // Début de la journée
+
+            const todayDate = new Date();
+            todayDate.setHours(0, 0, 0, 0); // Début de la journée
+
+            return emailDate.getTime() === todayDate.getTime();
           });
 
-          fetch.once('end', () => {
-            Promise.all(emailPromises)
-              .then((emails) => resolve(emails))
-              .catch((error) => reject(error));
-          });
-        });
-      });
+          // Ajouter les emails de ce dossier au tableau global
+          allEmails.push(...todayEmails);
+        } catch (folderError: any) {
+          this.logger.error(
+            `Erreur lors du traitement du dossier ${folder}: ${folderError.message}`,
+          );
+          // Continuer avec le dossier suivant
+        }
+      }
 
-      this.logger.log(`${emails.length} emails récupérés avec succès`);
-      return emails;
+      this.logger.log(
+        `${allEmails.length} emails non lus récupérés au total de tous les dossiers`,
+      );
+      return allEmails;
     } catch (error: any) {
       this.logger.error(
         `Erreur lors de la récupération des emails: ${error.message}`,
@@ -243,160 +308,175 @@ export class AnalyzeEmailService {
   }
 
   /**
-   * Récupère tous les emails du jour (lus et non lus)
-   * @param mailboxName Nom de la boîte aux lettres à analyser (par défaut: 'INBOX')
+   * Récupère tous les emails du jour (lus et non lus) de tous les dossiers
    */
-  async getAllTodayEmails(
-    mailboxName: string = 'INBOX',
-  ): Promise<EmailContent[]> {
+  async getAllTodayEmails(): Promise<EmailContent[]> {
     try {
       await this.connectToImap();
 
-      await new Promise<void>((resolve, reject) => {
-        this.imap.openBox(mailboxName, true, (err: any) => {
-          if (err) {
-            this.logger.error(
-              `Erreur lors de l'ouverture de la boîte ${mailboxName}: ${err.message}`,
-            );
-            return reject(
-              new Error(
-                `Erreur lors de l'ouverture de la boîte ${mailboxName}: ${err.message}`,
-              ),
-            );
-          }
-          resolve();
-        });
-      });
-
-      // Obtient la date d'aujourd'hui au format IMAP
-      const today = new Date();
-      today.setHours(0, 0, 0, 0); // Début de la journée
-
-      const day = today.getDate().toString().padStart(2, '0');
-      const month = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ][today.getMonth()];
-      const year = today.getFullYear();
-
-      const searchDate = `${day}-${month}-${year}`;
+      // Récupérer tous les dossiers disponibles
+      const folders = await this.getAllFolders();
       this.logger.log(
-        `Recherche de tous les emails dans ${mailboxName} pour la date: ${searchDate}`,
+        `Analyse de ${folders.length} dossiers pour tous les emails d'aujourd'hui`,
       );
 
-      const emails = await new Promise<EmailContent[]>((resolve, reject) => {
-        this.imap.search(['ALL'], (searchErr: any, results: any[]) => {
-          if (searchErr) {
-            this.logger.error(
-              `Erreur lors de la recherche des emails: ${searchErr.message}`,
-            );
-            return reject(
-              new Error(
-                `Erreur lors de la recherche des emails: ${searchErr.message}`,
-              ),
-            );
-          }
+      const allEmails: EmailContent[] = [];
 
-          if (!results || results.length === 0) {
-            this.logger.log("Aucun email trouvé pour aujourd'hui");
-            return resolve([]);
-          }
-
+      // Parcourir chaque dossier
+      for (const folder of folders) {
+        try {
           this.logger.log(
-            `${results.length} emails trouvés. Chargement du contenu...`,
+            `Recherche de tous les emails dans le dossier: ${folder}`,
           );
 
-          const emailPromises: Promise<EmailContent>[] = [];
-          const fetch = this.imap.fetch(results, {
-            bodies: [''],
-            struct: true,
+          await new Promise<void>((resolve, reject) => {
+            this.imap.openBox(folder, true, (err: any) => {
+              if (err) {
+                this.logger.warn(
+                  `Impossible d'ouvrir le dossier ${folder}: ${err.message}`,
+                );
+                return resolve(); // Continuer avec le dossier suivant
+              }
+              resolve();
+            });
           });
 
-          fetch.on('message', (msg: any, seqno: number) => {
-            const emailPromise = new Promise<EmailContent>(
-              (resolveEmail, rejectEmail) => {
-                const email: Partial<EmailContent> = { id: String(seqno) };
+          // Obtient la date d'aujourd'hui au format IMAP
+          const today = new Date();
+          const day = today.getDate().toString().padStart(2, '0');
+          const month = [
+            'Jan',
+            'Feb',
+            'Mar',
+            'Apr',
+            'May',
+            'Jun',
+            'Jul',
+            'Aug',
+            'Sep',
+            'Oct',
+            'Nov',
+            'Dec',
+          ][today.getMonth()];
+          const year = today.getFullYear();
 
-                msg.on('body', (stream: any) => {
-                  let buffer = '';
-                  stream.on('data', (chunk: any) => {
-                    buffer += chunk.toString('utf8');
-                  });
+          const searchDate = `${day}-${month}-${year}`;
+          this.logger.log(
+            `Recherche de tous les emails dans ${folder} pour la date: ${searchDate}`,
+          );
 
-                  stream.once('end', async () => {
-                    try {
-                      this.logger.debug(
-                        `Parsing du contenu de l'email #${seqno}`,
-                      );
-                      const parsed = await simpleParser(buffer);
+          // Rechercher tous les emails dans ce dossier
+          const folderEmails = await new Promise<EmailContent[]>(
+            (resolve, reject) => {
+              this.imap.search(['ALL'], (searchErr: any, results: any[]) => {
+                if (searchErr) {
+                  this.logger.error(
+                    `Erreur lors de la recherche des emails dans ${folder}: ${searchErr.message}`,
+                  );
+                  return resolve([]); // Continuer avec le dossier suivant
+                }
 
-                      email.from = parsed.from?.text || '';
-                      email.to = parsed.to?.text || '';
-                      email.subject = parsed.subject || '';
-                      email.date = parsed.date || new Date();
-                      email.body = parsed.text || '';
-
-                      this.logger.debug(
-                        `Email #${seqno} parsé avec succès: ${email.subject}`,
-                      );
-
-                      resolveEmail(email as EmailContent);
-                    } catch (e: any) {
-                      this.logger.error(
-                        `Erreur lors du parsing de l'email #${seqno}: ${e.message}`,
-                      );
-                      rejectEmail(
-                        new Error(
-                          `Erreur lors du parsing de l'email #${seqno}: ${e.message}`,
-                        ),
-                      );
-                    }
-                  });
-                });
-              },
-            );
-
-            emailPromises.push(emailPromise);
-          });
-
-          fetch.once('end', () => {
-            Promise.all(emailPromises)
-              .then((allEmails) => {
-                // Filtrer les emails par date (aujourd'hui uniquement)
-                const todayEmails = allEmails.filter((email) => {
-                  if (!email.date) return false;
-
-                  const emailDate = new Date(email.date);
-                  emailDate.setHours(0, 0, 0, 0); // Début de la journée
-
-                  const todayDate = new Date();
-                  todayDate.setHours(0, 0, 0, 0); // Début de la journée
-
-                  return emailDate.getTime() === todayDate.getTime();
-                });
+                if (!results || results.length === 0) {
+                  this.logger.log(`Aucun email trouvé dans ${folder}`);
+                  return resolve([]);
+                }
 
                 this.logger.log(
-                  `Récupération terminée. Filtrage: ${allEmails.length} emails récupérés, ${todayEmails.length} emails d'aujourd'hui.`,
+                  `${results.length} emails trouvés dans ${folder}. Chargement du contenu...`,
                 );
-                resolve(todayEmails);
-              })
-              .catch((error) => reject(error));
-          });
-        });
-      });
 
-      this.logger.log(`${emails.length} emails récupérés avec succès`);
-      return emails;
+                const emailPromises: Promise<EmailContent>[] = [];
+                const fetch = this.imap.fetch(results, {
+                  bodies: [''],
+                  struct: true,
+                });
+
+                fetch.on('message', (msg: any, seqno: number) => {
+                  const emailPromise = new Promise<EmailContent>(
+                    (resolveEmail, rejectEmail) => {
+                      const email: Partial<EmailContent> = {
+                        id: String(seqno),
+                        folderPath: folder,
+                      };
+
+                      msg.on('body', (stream: any) => {
+                        let buffer = '';
+                        stream.on('data', (chunk: any) => {
+                          buffer += chunk.toString('utf8');
+                        });
+
+                        stream.once('end', async () => {
+                          try {
+                            this.logger.debug(
+                              `Parsing du contenu de l'email #${seqno} dans ${folder}`,
+                            );
+                            const parsed = await simpleParser(buffer);
+
+                            email.from = parsed.from?.text || '';
+                            email.to = parsed.to?.text || '';
+                            email.subject = parsed.subject || '';
+                            email.date = parsed.date || new Date();
+                            email.body = parsed.text || '';
+
+                            this.logger.debug(
+                              `Email #${seqno} parsé avec succès: ${email.subject}`,
+                            );
+
+                            resolveEmail(email as EmailContent);
+                          } catch (e: any) {
+                            this.logger.error(
+                              `Erreur lors du parsing de l'email #${seqno}: ${e.message}`,
+                            );
+                            rejectEmail(
+                              new Error(
+                                `Erreur lors du parsing de l'email #${seqno}: ${e.message}`,
+                              ),
+                            );
+                          }
+                        });
+                      });
+                    },
+                  );
+
+                  emailPromises.push(emailPromise);
+                });
+
+                fetch.once('end', () => {
+                  Promise.all(emailPromises)
+                    .then((emails) => resolve(emails))
+                    .catch((error) => reject(error));
+                });
+              });
+            },
+          );
+
+          // Filtrer les emails par date (aujourd'hui uniquement)
+          const todayEmails = folderEmails.filter((email) => {
+            if (!email.date) return false;
+
+            const emailDate = new Date(email.date);
+            emailDate.setHours(0, 0, 0, 0); // Début de la journée
+
+            const todayDate = new Date();
+            todayDate.setHours(0, 0, 0, 0); // Début de la journée
+
+            return emailDate.getTime() === todayDate.getTime();
+          });
+
+          // Ajouter les emails de ce dossier au tableau global
+          allEmails.push(...todayEmails);
+        } catch (folderError: any) {
+          this.logger.error(
+            `Erreur lors du traitement du dossier ${folder}: ${folderError.message}`,
+          );
+          // Continuer avec le dossier suivant
+        }
+      }
+
+      this.logger.log(
+        `${allEmails.length} emails récupérés au total de tous les dossiers`,
+      );
+      return allEmails;
     } catch (error: any) {
       this.logger.error(
         `Erreur lors de la récupération des emails: ${error.message}`,

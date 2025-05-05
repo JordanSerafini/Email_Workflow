@@ -40,7 +40,7 @@ export class SendEmailService {
   ): Promise<EmailContent | null> {
     try {
       // Récupérer tous les emails du jour
-      const emails = await this.analyzeEmailService.getAllTodayEmails(mailbox);
+      const emails = await this.analyzeEmailService.getAllTodayEmails();
 
       // Trouver l'email avec l'ID spécifié
       const email = emails.find((e) => e.id === emailId);
@@ -213,8 +213,7 @@ export class SendEmailService {
   ): Promise<EmailContent[]> {
     try {
       // Récupérer tous les emails récents
-      const allEmails =
-        await this.analyzeEmailService.getAllTodayEmails(mailbox);
+      const allEmails = await this.analyzeEmailService.getAllTodayEmails();
 
       // Analyser les emails qui n'ont pas encore été analysés
       const emailsToAnalyze = allEmails.filter((email) => !email.analysis);
