@@ -1,0 +1,44 @@
+{
+  "fournisseur": "Solution Logique Informatique",
+  "adresse_fournisseur": "475, route des vernes, Pringy, 74370 Annecy",
+  "contact_fournisseur": {
+    "telephone": "04.50.64.02.33",
+    "fax": "04.50.64.11.72",
+    "email": "info@solution-logique.fr",
+    "site_internet": "www.solution-logique.fr"
+  },
+  "client": "Electricité Générale BAUD & FILS",
+  "adresse_client": "2373 route de Bonneville, 74250 PEILLONNEX",
+  "numero_facture": "FC20250297",
+  "date_facture": "07/03/2025",
+  "date_echeance": "14/03/2025",
+  "mode_reglement": "Virement à réception de facture",
+  "facturation": "Unique",
+  "produits": [
+    {
+      "quantite": 1,
+      "description": "Disque dur SSD 500Go",
+      "prix_unitaire_ht": 80,
+      "tva": 20,
+      "montant_ht": 80
+    },
+    {
+      "quantite": 1,
+      "description": "Forfait Installation et paramétrage",
+      "prix_unitaire_ht": 339.5,
+      "tva": 20,
+      "montant_ht": 339.5
+    }
+  ],
+  "total_net_ht": 419.5,
+  "frais_port_ht": 0,
+  "total_tva": 83.9,
+  "total_ttc": 503.4,
+  "acomptes": 0,
+  "net_a_payer": 503.4,
+  "rib": {
+    "banque": "LCL - SOLUTION LOGIQUE",
+    "iban": "FR26 3000 2021 6600 0007 1846 J97",
+    "bic": "CRLYFRPP"
+  }
+}

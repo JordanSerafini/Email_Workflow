@@ -18,7 +18,13 @@ services:
       - 3002:3002
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - EMAIL_SERVICE_URL=${EMAIL_SERVICE_URL}
-      - EMAIL_SERVICE_PORT=${EMAIL_SERVICE_PORT}
+      - EMAIL_USER=${EMAIL_USER}
+      - EMAIL_PASSWORD=${EMAIL_PASSWORD}
+      - EMAIL_HOST=${EMAIL_HOST}
+      - EMAIL_PORT=${EMAIL_PORT}
+      - EMAIL_TLS=${EMAIL_TLS}
+      - EMAIL_CATEGORIES=${EMAIL_CATEGORIES}
+    restart: unless-stopped
+
 
 
