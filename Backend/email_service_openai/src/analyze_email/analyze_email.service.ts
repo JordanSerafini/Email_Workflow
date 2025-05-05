@@ -139,89 +139,86 @@ export class AnalyzeEmailService {
       );
 
       const emails = await new Promise<EmailContent[]>((resolve, reject) => {
-        this.imap.search(
-          ['UNSEEN', 'ON', searchDate],
-          (searchErr: any, results: any[]) => {
-            if (searchErr) {
-              this.logger.error(
+        this.imap.search(['UNSEEN'], (searchErr: any, results: any[]) => {
+          if (searchErr) {
+            this.logger.error(
+              `Erreur lors de la recherche des emails: ${searchErr.message}`,
+            );
+            return reject(
+              new Error(
                 `Erreur lors de la recherche des emails: ${searchErr.message}`,
-              );
-              return reject(
-                new Error(
-                  `Erreur lors de la recherche des emails: ${searchErr.message}`,
-                ),
-              );
-            }
+              ),
+            );
+          }
 
-            if (!results || results.length === 0) {
-              this.logger.log("Aucun email non lu trouvé pour aujourd'hui");
-              return resolve([]);
-            }
+          if (!results || results.length === 0) {
+            this.logger.log("Aucun email non lu trouvé pour aujourd'hui");
+            return resolve([]);
+          }
 
-            this.logger.log(
-              `${results.length} emails non lus trouvés pour aujourd'hui. Chargement du contenu...`,
+          this.logger.log(
+            `${results.length} emails non lus trouvés. Chargement du contenu...`,
+          );
+
+          const emailPromises: Promise<EmailContent>[] = [];
+          const fetch = this.imap.fetch(results, {
+            bodies: [''],
+            struct: true,
+          });
+
+          fetch.on('message', (msg: any, seqno: number) => {
+            const emailPromise = new Promise<EmailContent>(
+              (resolveEmail, rejectEmail) => {
+                const email: Partial<EmailContent> = { id: String(seqno) };
+
+                msg.on('body', (stream: any) => {
+                  let buffer = '';
+                  stream.on('data', (chunk: any) => {
+                    buffer += chunk.toString('utf8');
+                  });
+
+                  stream.once('end', async () => {
+                    try {
+                      this.logger.debug(
+                        `Parsing du contenu de l'email #${seqno}`,
+                      );
+                      const parsed = await simpleParser(buffer);
+
+                      email.from = parsed.from?.text || '';
+                      email.to = parsed.to?.text || '';
+                      email.subject = parsed.subject || '';
+                      email.date = parsed.date || new Date();
+                      email.body = parsed.text || '';
+
+                      this.logger.debug(
+                        `Email #${seqno} parsé avec succès: ${email.subject}`,
+                      );
+
+                      resolveEmail(email as EmailContent);
+                    } catch (e: any) {
+                      this.logger.error(
+                        `Erreur lors du parsing de l'email #${seqno}: ${e.message}`,
+                      );
+                      rejectEmail(
+                        new Error(
+                          `Erreur lors du parsing de l'email #${seqno}: ${e.message}`,
+                        ),
+                      );
+                    }
+                  });
+                });
+              },
             );
 
-            const emailPromises: Promise<EmailContent>[] = [];
-            const fetch = this.imap.fetch(results, {
-              bodies: [''],
-              struct: true,
-            });
+            emailPromises.push(emailPromise);
+          });
 
-            fetch.on('message', (msg: any, seqno: number) => {
-              const emailPromise = new Promise<EmailContent>(
-                (resolveEmail, rejectEmail) => {
-                  const email: Partial<EmailContent> = { id: String(seqno) };
-
-                  msg.on('body', (stream: any) => {
-                    let buffer = '';
-                    stream.on('data', (chunk: any) => {
-                      buffer += chunk.toString('utf8');
-                    });
-
-                    stream.once('end', async () => {
-                      try {
-                        this.logger.debug(
-                          `Parsing du contenu de l'email #${seqno}`,
-                        );
-                        const parsed = await simpleParser(buffer);
-
-                        email.from = parsed.from?.text || '';
-                        email.to = parsed.to?.text || '';
-                        email.subject = parsed.subject || '';
-                        email.date = parsed.date || new Date();
-                        email.body = parsed.text || '';
-
-                        this.logger.debug(
-                          `Email #${seqno} parsé avec succès: ${email.subject}`,
-                        );
-
-                        resolveEmail(email as EmailContent);
-                      } catch (e: any) {
-                        this.logger.error(
-                          `Erreur lors du parsing de l'email #${seqno}: ${e.message}`,
-                        );
-                        rejectEmail(
-                          new Error(
-                            `Erreur lors du parsing de l'email #${seqno}: ${e.message}`,
-                          ),
-                        );
-                      }
-                    });
-                  });
-                },
-              );
-
-              emailPromises.push(emailPromise);
-            });
-
-            fetch.once('end', () => {
-              Promise.all(emailPromises)
-                .then((emails) => resolve(emails))
-                .catch((error) => reject(error));
-            });
-          },
-        );
+          fetch.once('end', () => {
+            Promise.all(emailPromises)
+              .then((emails) => resolve(emails))
+              .catch((error) => reject(error));
+          });
+        });
       });
 
       this.logger.log(`${emails.length} emails récupérés avec succès`);
@@ -287,89 +284,86 @@ export class AnalyzeEmailService {
       );
 
       const emails = await new Promise<EmailContent[]>((resolve, reject) => {
-        this.imap.search(
-          ['ON', searchDate],
-          (searchErr: any, results: any[]) => {
-            if (searchErr) {
-              this.logger.error(
+        this.imap.search(['ALL'], (searchErr: any, results: any[]) => {
+          if (searchErr) {
+            this.logger.error(
+              `Erreur lors de la recherche des emails: ${searchErr.message}`,
+            );
+            return reject(
+              new Error(
                 `Erreur lors de la recherche des emails: ${searchErr.message}`,
-              );
-              return reject(
-                new Error(
-                  `Erreur lors de la recherche des emails: ${searchErr.message}`,
-                ),
-              );
-            }
+              ),
+            );
+          }
 
-            if (!results || results.length === 0) {
-              this.logger.log("Aucun email trouvé pour aujourd'hui");
-              return resolve([]);
-            }
+          if (!results || results.length === 0) {
+            this.logger.log("Aucun email trouvé pour aujourd'hui");
+            return resolve([]);
+          }
 
-            this.logger.log(
-              `${results.length} emails trouvés pour aujourd'hui. Chargement du contenu...`,
+          this.logger.log(
+            `${results.length} emails trouvés. Chargement du contenu...`,
+          );
+
+          const emailPromises: Promise<EmailContent>[] = [];
+          const fetch = this.imap.fetch(results, {
+            bodies: [''],
+            struct: true,
+          });
+
+          fetch.on('message', (msg: any, seqno: number) => {
+            const emailPromise = new Promise<EmailContent>(
+              (resolveEmail, rejectEmail) => {
+                const email: Partial<EmailContent> = { id: String(seqno) };
+
+                msg.on('body', (stream: any) => {
+                  let buffer = '';
+                  stream.on('data', (chunk: any) => {
+                    buffer += chunk.toString('utf8');
+                  });
+
+                  stream.once('end', async () => {
+                    try {
+                      this.logger.debug(
+                        `Parsing du contenu de l'email #${seqno}`,
+                      );
+                      const parsed = await simpleParser(buffer);
+
+                      email.from = parsed.from?.text || '';
+                      email.to = parsed.to?.text || '';
+                      email.subject = parsed.subject || '';
+                      email.date = parsed.date || new Date();
+                      email.body = parsed.text || '';
+
+                      this.logger.debug(
+                        `Email #${seqno} parsé avec succès: ${email.subject}`,
+                      );
+
+                      resolveEmail(email as EmailContent);
+                    } catch (e: any) {
+                      this.logger.error(
+                        `Erreur lors du parsing de l'email #${seqno}: ${e.message}`,
+                      );
+                      rejectEmail(
+                        new Error(
+                          `Erreur lors du parsing de l'email #${seqno}: ${e.message}`,
+                        ),
+                      );
+                    }
+                  });
+                });
+              },
             );
 
-            const emailPromises: Promise<EmailContent>[] = [];
-            const fetch = this.imap.fetch(results, {
-              bodies: [''],
-              struct: true,
-            });
+            emailPromises.push(emailPromise);
+          });
 
-            fetch.on('message', (msg: any, seqno: number) => {
-              const emailPromise = new Promise<EmailContent>(
-                (resolveEmail, rejectEmail) => {
-                  const email: Partial<EmailContent> = { id: String(seqno) };
-
-                  msg.on('body', (stream: any) => {
-                    let buffer = '';
-                    stream.on('data', (chunk: any) => {
-                      buffer += chunk.toString('utf8');
-                    });
-
-                    stream.once('end', async () => {
-                      try {
-                        this.logger.debug(
-                          `Parsing du contenu de l'email #${seqno}`,
-                        );
-                        const parsed = await simpleParser(buffer);
-
-                        email.from = parsed.from?.text || '';
-                        email.to = parsed.to?.text || '';
-                        email.subject = parsed.subject || '';
-                        email.date = parsed.date || new Date();
-                        email.body = parsed.text || '';
-
-                        this.logger.debug(
-                          `Email #${seqno} parsé avec succès: ${email.subject}`,
-                        );
-
-                        resolveEmail(email as EmailContent);
-                      } catch (e: any) {
-                        this.logger.error(
-                          `Erreur lors du parsing de l'email #${seqno}: ${e.message}`,
-                        );
-                        rejectEmail(
-                          new Error(
-                            `Erreur lors du parsing de l'email #${seqno}: ${e.message}`,
-                          ),
-                        );
-                      }
-                    });
-                  });
-                },
-              );
-
-              emailPromises.push(emailPromise);
-            });
-
-            fetch.once('end', () => {
-              Promise.all(emailPromises)
-                .then((emails) => resolve(emails))
-                .catch((error) => reject(error));
-            });
-          },
-        );
+          fetch.once('end', () => {
+            Promise.all(emailPromises)
+              .then((emails) => resolve(emails))
+              .catch((error) => reject(error));
+          });
+        });
       });
 
       this.logger.log(`${emails.length} emails récupérés avec succès`);
