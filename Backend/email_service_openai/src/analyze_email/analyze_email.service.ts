@@ -261,6 +261,8 @@ export class AnalyzeEmailService {
 
       // Obtient la date d'aujourd'hui au format IMAP
       const today = new Date();
+      today.setHours(0, 0, 0, 0); // Début de la journée
+      
       const day = today.getDate().toString().padStart(2, '0');
       const month = [
         'Jan',
@@ -360,7 +362,23 @@ export class AnalyzeEmailService {
 
           fetch.once('end', () => {
             Promise.all(emailPromises)
-              .then((emails) => resolve(emails))
+              .then((allEmails) => {
+                // Filtrer les emails par date (aujourd'hui uniquement)
+                const todayEmails = allEmails.filter(email => {
+                  if (!email.date) return false;
+                  
+                  const emailDate = new Date(email.date);
+                  emailDate.setHours(0, 0, 0, 0); // Début de la journée
+                  
+                  const todayDate = new Date();
+                  todayDate.setHours(0, 0, 0, 0); // Début de la journée
+                  
+                  return emailDate.getTime() === todayDate.getTime();
+                });
+                
+                this.logger.log(`Récupération terminée. Filtrage: ${allEmails.length} emails récupérés, ${todayEmails.length} emails d'aujourd'hui.`);
+                resolve(todayEmails);
+              })
               .catch((error) => reject(error));
           });
         });
@@ -435,6 +453,13 @@ export class AnalyzeEmailService {
     3. Catégorie (personnel, professionnel, marketing, facture, administratif, autre)
     4. Si une action est requise (true/false)
     5. Si une action est requise, liste des actions à prendre
+    
+    IMPORTANT pour les actions à prendre:
+    - Les actions doivent être directement liées au contenu spécifique de l'email
+    - Pour les confirmations de rendez-vous/réunions: suggérer "Confirmer le rendez-vous" ou "Ajouter à l'agenda" 
+    - Éviter les actions génériques qui ne découlent pas directement du contenu de l'email
+    - Si l'email nécessite une réponse, ajouter l'action "Répondre à cet email"
+    - Pour les demandes d'information, les questions ou les requêtes: suggérer "Répondre à cet email"
     
     Réponse au format JSON strict avec les clés: summary, priority, category, actionRequired, actionItems (si applicable)
     `;
@@ -591,6 +616,116 @@ export class AnalyzeEmailService {
         topPriorityEmails: highPriorityEmails.slice(0, 3),
         actionItems: allActionItems.slice(0, 5),
       };
+    }
+  }
+
+  /**
+   * Génère un brouillon de réponse pour un email donné
+   * @param email Email pour lequel générer une réponse
+   */
+  async generateEmailResponse(email: EmailContent): Promise<string> {
+    this.logger.debug(`Génération d'une réponse pour l'email: ${email.subject}`);
+
+    // Préparer le contenu pour la génération de réponse
+    const prompt = `
+    Tu dois rédiger une réponse professionnelle à l'email suivant:
+    
+    De: ${email.from}
+    À: ${email.to}
+    Sujet: ${email.subject}
+    Date: ${email.date}
+    
+    Contenu de l'email:
+    ${email.body.substring(0, 1500)}
+    
+    Instructions pour la réponse:
+    - Garder un ton professionnel et courtois
+    - Répondre directement aux questions ou demandes
+    - Être concis mais complet
+    - Si l'email concerne une réunion ou un rendez-vous, confirmer la disponibilité
+    - Si l'email concerne une demande d'information, fournir des réponses précises ou demander plus de détails si nécessaire
+    - Terminer par une formule de politesse appropriée
+    
+    Rédige uniquement le corps de l'email, sans objet ni formule d'introduction comme "Voici ma réponse:".
+    `;
+
+    try {
+      const response = await this.openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: 'Tu es un assistant professionnel expert en rédaction d\'emails. Tu réponds de manière concise, claire et adaptée au contexte professionnel.',
+          },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.7,
+      });
+
+      const draftResponse = response.choices[0].message.content || 'Impossible de générer une réponse.';
+      return draftResponse;
+    } catch (error: any) {
+      this.logger.error(
+        `Erreur lors de la génération de la réponse à l'email: ${error.message}`,
+      );
+      return 'Impossible de générer une réponse à cet email. Veuillez essayer ultérieurement.';
+    }
+  }
+
+  /**
+   * Reformule ou améliore un brouillon de réponse à un email
+   * @param email Email original
+   * @param draftResponse Brouillon de réponse à améliorer
+   * @param instructions Instructions spécifiques pour la reformulation
+   */
+  async rewriteEmailResponse(
+    email: EmailContent, 
+    draftResponse: string, 
+    instructions: string
+  ): Promise<string> {
+    this.logger.debug(`Reformulation de la réponse pour l'email: ${email.subject}`);
+
+    // Préparer le contenu pour la reformulation
+    const prompt = `
+    Tu dois reformuler ou améliorer cette réponse à un email selon les instructions spécifiques.
+    
+    Email original:
+    De: ${email.from}
+    À: ${email.to}
+    Sujet: ${email.subject}
+    
+    Contenu de l'email original:
+    ${email.body.substring(0, 500)}
+    
+    Brouillon de réponse actuel:
+    ${draftResponse}
+    
+    Instructions pour la reformulation:
+    ${instructions}
+    
+    Fournir uniquement la version reformulée de la réponse, sans commentaires additionnels.
+    `;
+
+    try {
+      const response = await this.openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: 'Tu es un rédacteur professionnel expert en communication par email. Tu améliores les réponses en respectant les instructions spécifiques tout en conservant le message d\'origine.',
+          },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.7,
+      });
+
+      const rewrittenResponse = response.choices[0].message.content || 'Impossible de reformuler la réponse.';
+      return rewrittenResponse;
+    } catch (error: any) {
+      this.logger.error(
+        `Erreur lors de la reformulation de la réponse: ${error.message}`,
+      );
+      return 'Impossible de reformuler la réponse. Veuillez essayer ultérieurement.';
     }
   }
 }
