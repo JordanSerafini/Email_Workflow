@@ -4,6 +4,10 @@ import * as Imap from 'node-imap';
 import { simpleParser } from 'mailparser';
 import OpenAI from 'openai';
 
+// Constantes pour le traitement par lots
+const BATCH_SIZE = 5; // Nombre d'emails à traiter par lot
+const BATCH_DELAY_MS = 2000; // Délai entre les lots en millisecondes
+
 // Exporter l'interface pour qu'elle soit disponible dans le contrôleur
 export interface EmailContent {
   id: string;
@@ -410,31 +414,65 @@ export class AnalyzeEmailService {
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
 
-    const analyzedEmails = await Promise.all(
-      emails.map(async (email) => {
-        try {
-          const analysisResult = await this.analyzeEmailContent(email);
-          
-          // Agréger les tokens
-          if (analysisResult.tokensUsed) {
-            totalInputTokens += analysisResult.tokensUsed.input;
-            totalOutputTokens += analysisResult.tokensUsed.output;
-          }
-          
-          return {
-            ...email,
-            analysis: analysisResult,
-          };
-        } catch (error: any) {
-          this.logger.error(
-            `Erreur lors de l'analyse de l'email ${email.id}: ${error.message}`,
-          );
-          return email;
-        }
-      }),
-    );
+    // Traiter les emails par lots pour éviter de surcharger l'API
+    const analyzedEmails = await this.processEmailsInBatches(emails);
+    
+    // Calculer le total des tokens utilisés
+    analyzedEmails.forEach(email => {
+      if (email.analysis?.tokensUsed) {
+        totalInputTokens += email.analysis.tokensUsed.input;
+        totalOutputTokens += email.analysis.tokensUsed.output;
+      }
+    });
 
-    this.logger.log(`Analyse terminée pour ${emails.length} emails. Tokens utilisés: ${totalInputTokens} (entrée), ${totalOutputTokens} (sortie)`);
+    this.logger.log(
+      `Analyse terminée pour ${emails.length} emails. Tokens utilisés: ${totalInputTokens} (entrée), ${totalOutputTokens} (sortie)`,
+    );
+    return analyzedEmails;
+  }
+
+  /**
+   * Traite les emails par lots pour éviter de surcharger l'API OpenAI
+   * @param emails Liste des emails à traiter
+   */
+  private async processEmailsInBatches(emails: EmailContent[]): Promise<EmailContent[]> {
+    this.logger.log(`Traitement des emails par lots: ${emails.length} emails au total, ${BATCH_SIZE} emails par lot`);
+    
+    const analyzedEmails: EmailContent[] = [];
+    
+    // Diviser les emails en lots
+    for (let i = 0; i < emails.length; i += BATCH_SIZE) {
+      const batch = emails.slice(i, i + BATCH_SIZE);
+      this.logger.log(`Traitement du lot ${i/BATCH_SIZE + 1}/${Math.ceil(emails.length/BATCH_SIZE)} (${batch.length} emails)`);
+      
+      // Analyser le lot d'emails
+      const batchResults = await Promise.all(
+        batch.map(async (email) => {
+          try {
+            const analysisResult = await this.analyzeEmailContent(email);
+            return {
+              ...email,
+              analysis: analysisResult,
+            };
+          } catch (error) {
+            this.logger.error(
+              `Erreur lors de l'analyse de l'email ${email.id}: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            return email;
+          }
+        }),
+      );
+      
+      // Ajouter les résultats du lot au tableau global
+      analyzedEmails.push(...batchResults);
+      
+      // Si ce n'est pas le dernier lot, attendre avant de continuer
+      if (i + BATCH_SIZE < emails.length) {
+        this.logger.log(`Attente de ${BATCH_DELAY_MS/1000} secondes avant le prochain lot...`);
+        await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
+      }
+    }
+    
     return analyzedEmails;
   }
 
@@ -462,7 +500,7 @@ export class AnalyzeEmailService {
     Email de: ${email.from}
     À: ${email.to}
     Sujet: ${email.subject}
-    Date: ${email.date}
+    Date: ${email.date.toISOString()}
     
     Contenu:
     ${email.body.substring(0, 1500)}
@@ -479,7 +517,7 @@ export class AnalyzeEmailService {
     - Pour les confirmations de rendez-vous/réunions: suggérer "Confirmer le rendez-vous" ou "Ajouter à l'agenda" 
     - Éviter les actions génériques qui ne découlent pas directement du contenu de l'email
     - Si l'email nécessite une réponse, ajouter l'action "Répondre à cet email"
-    - Toujours Suggérer "Répondre à cet email"
+    - Suggérer "Répondre à cet email" si pertinent
     
     Réponse au format JSON strict avec les clés: summary, priority, category, actionRequired, actionItems (si applicable)
     `;
@@ -701,7 +739,7 @@ export class AnalyzeEmailService {
     De: ${email.from}
     À: ${email.to}
     Sujet: ${email.subject}
-    Date: ${email.date}
+    Date: ${email.date.toISOString()}
     
     Contenu de l'email:
     ${email.body.substring(0, 1500)}
@@ -766,9 +804,9 @@ export class AnalyzeEmailService {
    * @param instructions Instructions spécifiques pour la reformulation
    */
   async rewriteEmailResponse(
-    email: EmailContent, 
-    draftResponse: string, 
-    instructions: string
+    email: EmailContent,
+    draftResponse: string,
+    instructions: string,
   ): Promise<{
     response: string;
     tokensUsed: {
