@@ -35,8 +35,14 @@ export class SortEmailController {
   @Post('sort')
   async sortEmails() {
     try {
+      this.logger.log('Démarrage du processus de tri des emails...');
       const sortedEmails = await this.sortEmailService.sortEmails();
+
+      this.logger.log(
+        'Emails triés, début du déplacement vers les dossiers appropriés...',
+      );
       await this.sortEmailService.processSortedEmails(sortedEmails);
+      this.logger.log('Déplacement des emails terminé avec succès');
 
       // Préparer une réponse avec des statistiques
       const stats = Object.entries(sortedEmails).map(([category, emails]) => ({
@@ -46,7 +52,7 @@ export class SortEmailController {
 
       return {
         success: true,
-        message: 'Emails triés avec succès',
+        message: 'Emails triés et déplacés avec succès',
         stats,
       };
     } catch (error: unknown) {
@@ -63,8 +69,14 @@ export class SortEmailController {
   @Post('sort-all')
   async sortAllEmails() {
     try {
+      this.logger.log('Démarrage du processus de tri de tous les emails...');
       const sortedEmails = await this.sortEmailService.sortAllEmails();
+
+      this.logger.log(
+        'Tous les emails triés, début du déplacement vers les dossiers appropriés...',
+      );
       await this.sortEmailService.processSortedEmails(sortedEmails);
+      this.logger.log('Déplacement de tous les emails terminé avec succès');
 
       // Préparer une réponse avec des statistiques
       const stats = Object.entries(sortedEmails).map(([category, emails]) => ({
@@ -74,7 +86,7 @@ export class SortEmailController {
 
       return {
         success: true,
-        message: 'Tous les emails triés avec succès',
+        message: 'Tous les emails triés et déplacés avec succès',
         stats,
       };
     } catch (error: unknown) {
@@ -93,6 +105,7 @@ export class SortEmailController {
   /**
    * Endpoint pour analyser les factures
    * Tri d'abord les emails, puis analyse spécifiquement les factures
+   * SANS déplacer ou classer les emails
    */
   @Post('analyze-invoices')
   async analyzeInvoices() {
@@ -115,12 +128,12 @@ export class SortEmailController {
       const analyzedInvoices =
         await this.sortEmailService.analyzeInvoices(invoiceEmails);
 
-      // Déplacer les emails vers leurs catégories
-      await this.sortEmailService.processSortedEmails(sortedEmails);
+      // NE PAS déplacer les emails vers leurs catégories
+      // await this.sortEmailService.processSortedEmails(sortedEmails);
 
       return {
         success: true,
-        message: `${analyzedInvoices.length} factures analysées avec succès`,
+        message: `${analyzedInvoices.length} factures analysées avec succès (sans déplacement)`,
         invoices: analyzedInvoices,
       };
     } catch (error: unknown) {
@@ -167,6 +180,109 @@ export class SortEmailController {
         success: false,
         message: `Erreur: ${errorMessage}`,
         emailsProcessed: 0,
+      };
+    }
+  }
+
+  /**
+   * Endpoint pour analyser tous les emails non lus dans tous les dossiers
+   * SANS déplacer ou classer les emails
+   */
+  @Post('analyze-all-folders/unread')
+  async analyzeUnreadEmailsFromAllFolders() {
+    try {
+      // Trier les emails non lus de tous les dossiers (sans déplacement)
+      const sortedEmails =
+        await this.sortEmailService.sortEmailsFromAllFolders();
+
+      // Récupérer les emails classés comme "Factures"
+      const invoiceEmails = sortedEmails['Factures'] || [];
+
+      if (invoiceEmails.length === 0) {
+        return {
+          success: true,
+          message:
+            'Aucune facture non lue trouvée pour analyse dans tous les dossiers',
+          invoices: [],
+        };
+      }
+
+      // Analyser les factures
+      const analyzedInvoices =
+        await this.sortEmailService.analyzeInvoices(invoiceEmails);
+
+      // NE PAS déplacer les emails vers leurs catégories
+      // await this.sortEmailService.processSortedEmails(sortedEmails);
+
+      return {
+        success: true,
+        message: `${analyzedInvoices.length} factures non lues analysées avec succès depuis tous les dossiers (sans déplacement)`,
+        invoices: analyzedInvoices,
+      };
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error);
+      this.logger.error(
+        `Erreur lors de l'analyse des factures non lues de tous les dossiers: ${errorMessage}`,
+      );
+      return {
+        success: false,
+        message:
+          "Erreur lors de l'analyse des factures non lues de tous les dossiers",
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * Endpoint pour analyser tous les emails (lus et non lus) dans tous les dossiers
+   * SANS déplacer ou classer les emails
+   */
+  @Post('analyze-all-folders/all')
+  async analyzeAllEmailsFromAllFolders() {
+    try {
+      // Trier tous les emails de tous les dossiers (sans déplacement)
+      const sortedEmails =
+        await this.sortEmailService.sortAllEmailsFromAllFolders();
+
+      // Récupérer les emails classés comme "Factures"
+      const invoiceEmails = sortedEmails['Factures'] || [];
+
+      if (invoiceEmails.length === 0) {
+        return {
+          success: true,
+          message: 'Aucune facture trouvée pour analyse dans tous les dossiers',
+          invoices: [],
+        };
+      }
+
+      // Analyser les factures
+      const analyzedInvoices =
+        await this.sortEmailService.analyzeInvoices(invoiceEmails);
+
+      // NE PAS déplacer les emails vers leurs catégories
+      // await this.sortEmailService.processSortedEmails(sortedEmails);
+
+      return {
+        success: true,
+        message: `${analyzedInvoices.length} factures analysées avec succès depuis tous les dossiers (lues et non lues, sans déplacement)`,
+        invoices: analyzedInvoices,
+        totalEmails: Object.values(sortedEmails).flat().length,
+        emailsByCategory: Object.fromEntries(
+          Object.entries(sortedEmails).map(([category, emails]) => [
+            category,
+            emails.length,
+          ]),
+        ),
+      };
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error);
+      this.logger.error(
+        `Erreur lors de l'analyse des factures de tous les dossiers: ${errorMessage}`,
+      );
+      return {
+        success: false,
+        message: "Erreur lors de l'analyse des factures de tous les dossiers",
+        error: errorMessage,
       };
     }
   }

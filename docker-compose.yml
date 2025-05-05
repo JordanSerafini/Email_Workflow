@@ -1,14 +1,4 @@
 services:
-  # model_service:
-  #   build:
-  #     context: ./Backend/model_service
-  #     dockerfile: Dockerfile
-  #   container_name: model_service
-  #   ports:
-  #     - 3001:3001
-  #   environment:
-  #     - MODEL_URL=${MODEL_URL}
-
   email_service_openai:
     build:
       context: ./Backend/email_service_openai
@@ -25,6 +15,30 @@ services:
       - EMAIL_TLS=${EMAIL_TLS}
       - EMAIL_CATEGORIES=${EMAIL_CATEGORIES}
     restart: unless-stopped
+    networks:
+      - app-network
+
+  whatsapp_service:
+    build:
+      context: ./Backend/whatsapp_service
+      dockerfile: Dockerfile
+    container_name: whatsapp_service
+    ports:
+      - 3003:3003
+    environment:
+      - EMAIL_SERVICE_URL=http://email_service_openai:3002
+      - WHATSAPP_TOKEN=${WHATSAPP_TOKEN}
+      - PHONE_NUMBER_ID=${PHONE_NUMBER_ID}
+      - WHATSAPP_VERIFY_TOKEN=${WHATSAPP_VERIFY_TOKEN}
+    depends_on:
+      - email_service_openai
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
 
 
 
