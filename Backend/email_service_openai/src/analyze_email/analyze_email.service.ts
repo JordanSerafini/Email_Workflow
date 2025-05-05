@@ -735,16 +735,16 @@ export class AnalyzeEmailService {
     });
 
     // Générer un résumé global avec OpenAI
-    
+
     // Obtenir la date du jour au format JJ/MM/AAAA
     const today = new Date();
     const day = today.getDate().toString().padStart(2, '0');
     const month = (today.getMonth() + 1).toString().padStart(2, '0');
     const year = today.getFullYear();
     const formattedDate = `${day}/${month}/${year}`;
-    
+
     const summaryPrompt = `
-    Résumer cet ensemble de ${totalEmails} emails:
+    Analyser et résumer cet ensemble de ${totalEmails} emails:
     
     ${analyzedEmails
       .map(
@@ -754,24 +754,45 @@ export class AnalyzeEmailService {
        Priorité: ${email.analysis?.priority || 'non analysé'}
        Catégorie: ${email.analysis?.category || 'non catégorisé'}
        Résumé: ${email.analysis?.summary || 'non résumé'}
-       Dossier: ${email.folderPath || 'non spécifié'}`,
+       Dossier: ${email.folderPath || 'non spécifié'}
+       Actions requises: ${email.analysis?.actionItems ? email.analysis.actionItems.join(', ') : 'aucune'}`,
       )
       .join('\n\n')}
     
-    Formater votre réponse EXACTEMENT comme ceci:
+    Formater votre réponse avec cette structure précise:
 
-    "Voici le résumé de vos mails lus et non lus d'aujourd'hui : ${formattedDate}
+    "Voici le résumé de vos emails du ${formattedDate}
 
-    **[SUJET EMAIL 1] - [EXPÉDITEUR] :**
-    [Description concise de 1-2 phrases sur le contenu essentiel]
+    ### Emails prioritaires
+    ${highPriorityEmails.length > 0 ? '' : "Aucun email prioritaire aujourd'hui"}
+    ${highPriorityEmails
+      .map(
+        (_, i) => `**[SUJET]** - [EXPÉDITEUR]
+    • [Résumé concis du contenu]
+    • [Actions à entreprendre si nécessaire]`,
+      )
+      .join('\n\n')}
 
-    **[SUJET EMAIL 2] - [EXPÉDITEUR] :**
-    [Description concise de 1-2 phrases sur le contenu essentiel]"
+    ### Emails professionnels
+    ${analyzedEmails.filter((e) => e.analysis?.category === 'professionnel').length > 0 ? '' : "Aucun email professionnel aujourd'hui"}
+    
+    ### Actions requises
+    ${allActionItems.length > 0 ? '' : "Aucune action requise aujourd'hui"}
+    ${allActionItems.length > 0 ? '1. [Action 1]' : ''}
+    ${allActionItems.length > 1 ? '2. [Action 2]' : ''}
+    ${allActionItems.length > 2 ? '3. [Action 3]' : ''}
+    
+    ### Autres emails
+    [Résumé des autres emails moins importants]"
 
-    Continue pour tous les emails importants. Ne pas produire de résumé général, seulement ce format précis. 
-    Liste d'abord les emails haute priorité, puis les emails professionnels, puis les autres.
-    Limiter à une ou deux phrases MAXIMUM par email.
-    Mentionner des détails spécifiques comme heures, dates, montants quand disponibles.
+    Remplace chaque placeholder entre crochets par le contenu approprié.
+    Pour les emails prioritaires et professionnels, liste les emails individuellement avec leur sujet et expéditeur en gras.
+    Pour les actions requises, liste les 3-5 actions les plus importantes à entreprendre, triées par priorité.
+    Pour les autres emails, fais un bref résumé groupé des emails restants par catégorie.
+    
+    Limite la description de chaque email à 1-2 phrases MAXIMUM.
+    Mentionne des détails spécifiques (dates, heures, montants) quand ils sont disponibles.
+    Utilise un ton direct et factuel.
     `;
 
     try {
