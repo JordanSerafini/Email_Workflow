@@ -17,9 +17,13 @@ export class AnalyzeEmailController {
   /**
    * Récupère et analyse les emails non lus d'aujourd'hui avec un résumé général
    * @param summary Si true, inclut un résumé général des emails (optionnel, par défaut: false)
+   * @param fastMode Si true, effectue une analyse rapide avec moins de détails (optionnel, par défaut: false)
    */
   @Get('today')
-  async analyzeTodayEmails(@Query('summary') summary?: string): Promise<{
+  async analyzeTodayEmails(
+    @Query('summary') summary?: string,
+    @Query('fastMode') fastMode?: string,
+  ): Promise<{
     status: string;
     message: string;
     data: EmailContent[];
@@ -59,14 +63,19 @@ export class AnalyzeEmailController {
         };
       }
 
-      // Analyse des emails récupérés
-      const analyzedEmails =
-        await this.analyzeEmailService.analyzeEmails(todayEmails);
+      // Analyse des emails récupérés (mode rapide si spécifié)
+      const analyzedEmails = await this.analyzeEmailService.analyzeEmails(
+        todayEmails,
+        fastMode === 'true',
+      );
 
       // Si résumé demandé, générer un résumé global
       if (summary === 'true') {
         const overallSummary =
-          await this.analyzeEmailService.generateOverallSummary(analyzedEmails);
+          await this.analyzeEmailService.generateOverallSummary(
+            analyzedEmails,
+            fastMode === 'true',
+          );
 
         // Calculer le total des tokens utilisés (analyse d'emails + résumé)
         const totalTokensUsed = {
@@ -86,7 +95,7 @@ export class AnalyzeEmailController {
 
         return {
           status: 'success',
-          message: `${analyzedEmails.length} emails non lus analysés avec succès`,
+          message: `${analyzedEmails.length} emails non lus analysés avec succès${fastMode === 'true' ? ' (mode rapide)' : ''}`,
           data: analyzedEmails,
           summary: {
             overview: overallSummary.summary,
@@ -119,7 +128,7 @@ export class AnalyzeEmailController {
 
       return {
         status: 'success',
-        message: `${analyzedEmails.length} emails non lus analysés avec succès`,
+        message: `${analyzedEmails.length} emails non lus analysés avec succès${fastMode === 'true' ? ' (mode rapide)' : ''}`,
         data: analyzedEmails,
         tokensUsed: totalTokensUsed,
       };
@@ -243,9 +252,13 @@ export class AnalyzeEmailController {
   /**
    * Récupère et analyse tous les emails du jour (lus et non lus)
    * @param summary Si true, inclut un résumé général des emails (optionnel, par défaut: false)
+   * @param fastMode Si true, utilise un mode rapide avec analyse optimisée (optionnel, par défaut: false)
    */
   @Get('today/all')
-  async analyzeAllTodayEmails(@Query('summary') summary?: string): Promise<{
+  async analyzeAllTodayEmails(
+    @Query('summary') summary?: string,
+    @Query('fastMode') fastMode?: string,
+  ): Promise<{
     status: string;
     message: string;
     data: EmailContent[];
@@ -257,36 +270,86 @@ export class AnalyzeEmailController {
       categoryCounts: Record<string, number>;
       topPriorityEmails: EmailContent[];
       actionItems: string[];
+      tokensUsed?: {
+        input: number;
+        output: number;
+        total: number;
+      };
+    };
+    performanceMetrics?: {
+      totalDuration: number;
+      emailFetchDuration: number;
+      analysisDuration: number;
+      summaryDuration?: number;
     };
   }> {
     try {
+      const startTime = Date.now();
+      const isFastMode = fastMode === 'true';
+
       this.logger.log(
-        `Début de l'analyse de tous les emails d'aujourd'hui dans tous les dossiers`,
+        `Début de l'analyse de tous les emails d'aujourd'hui dans tous les dossiers${isFastMode ? ' (mode rapide)' : ''}`,
       );
 
       // Récupération de tous les emails du jour (lus et non lus)
+      const fetchStartTime = Date.now();
       const todayEmails = await this.analyzeEmailService.getAllTodayEmails();
+      const fetchEndTime = Date.now();
 
       if (todayEmails.length === 0) {
         return {
           status: 'success',
           message: `Aucun email trouvé pour aujourd'hui dans tous les dossiers`,
           data: [],
+          performanceMetrics: {
+            totalDuration: Date.now() - startTime,
+            emailFetchDuration: fetchEndTime - fetchStartTime,
+            analysisDuration: 0,
+          },
         };
       }
 
       // Analyse des emails récupérés
-      const analyzedEmails =
-        await this.analyzeEmailService.analyzeEmails(todayEmails);
+      const analysisStartTime = Date.now();
+      const analyzedEmails = await this.analyzeEmailService.analyzeEmails(
+        todayEmails,
+        isFastMode,
+      );
+      const analysisEndTime = Date.now();
+
+      // Métriques de performance de base
+      const performanceMetrics: {
+        totalDuration: number;
+        emailFetchDuration: number;
+        analysisDuration: number;
+        summaryDuration?: number;
+      } = {
+        totalDuration: 0, // Sera mis à jour à la fin
+        emailFetchDuration: fetchEndTime - fetchStartTime,
+        analysisDuration: analysisEndTime - analysisStartTime,
+      };
 
       // Si résumé demandé, générer un résumé global
       if (summary === 'true') {
+        const summaryStartTime = Date.now();
         const overallSummary =
-          await this.analyzeEmailService.generateOverallSummary(analyzedEmails);
+          await this.analyzeEmailService.generateOverallSummary(
+            analyzedEmails,
+            isFastMode,
+          );
+        const summaryEndTime = Date.now();
+
+        // Mettre à jour les métriques avec le temps de génération du résumé
+        performanceMetrics.summaryDuration = summaryEndTime - summaryStartTime;
+        performanceMetrics.totalDuration = Date.now() - startTime;
+
+        this.logger.log(
+          `Analyse complète en ${performanceMetrics.totalDuration}ms (récupération: ${performanceMetrics.emailFetchDuration}ms, analyse: ${performanceMetrics.analysisDuration}ms, résumé: ${performanceMetrics.summaryDuration}ms)`,
+        );
 
         return {
           status: 'success',
-          message: `${analyzedEmails.length} emails analysés avec succès`,
+          message: `${analyzedEmails.length} emails analysés avec succès${isFastMode ? ' (mode rapide)' : ''}`,
           data: analyzedEmails,
           summary: {
             overview: overallSummary.summary,
@@ -296,14 +359,24 @@ export class AnalyzeEmailController {
             categoryCounts: overallSummary.categoryCounts,
             topPriorityEmails: overallSummary.topPriorityEmails,
             actionItems: overallSummary.actionItems,
+            tokensUsed: overallSummary.tokensUsed,
           },
+          performanceMetrics,
         };
       }
 
+      // Finaliser les métriques de performance sans résumé
+      performanceMetrics.totalDuration = Date.now() - startTime;
+
+      this.logger.log(
+        `Analyse complète en ${performanceMetrics.totalDuration}ms (récupération: ${performanceMetrics.emailFetchDuration}ms, analyse: ${performanceMetrics.analysisDuration}ms)`,
+      );
+
       return {
         status: 'success',
-        message: `${analyzedEmails.length} emails analysés avec succès`,
+        message: `${analyzedEmails.length} emails analysés avec succès${isFastMode ? ' (mode rapide)' : ''}`,
         data: analyzedEmails,
+        performanceMetrics,
       };
     } catch (error: unknown) {
       const errorMessage =
@@ -321,9 +394,14 @@ export class AnalyzeEmailController {
 
   /**
    * Endpoint dédié au résumé global de tous les emails d'aujourd'hui (lus et non lus)
+   * @param limit Nombre maximum d'emails à analyser (optionnel)
+   * @param fastMode Si true, utilise un mode rapide avec analyse optimisée (optionnel, par défaut: false)
    */
   @Get('today/all/summary')
-  async getAllTodayEmailsSummary(@Query('limit') limit?: string): Promise<{
+  async getAllTodayEmailsSummary(
+    @Query('limit') limit?: string,
+    @Query('fastMode') fastMode?: string,
+  ): Promise<{
     status: string;
     message: string;
     data: EmailContent[];
@@ -341,17 +419,29 @@ export class AnalyzeEmailController {
         total: number;
       };
     };
+    performanceMetrics?: {
+      totalDuration: number;
+      emailFetchDuration: number;
+      analysisDuration: number;
+      summaryDuration: number;
+    };
   }> {
     try {
+      const startTime = Date.now();
+      const isFastMode = fastMode === 'true';
+
       this.logger.log(
-        `Génération du résumé de tous les emails d'aujourd'hui dans tous les dossiers`,
+        `Génération du résumé de tous les emails d'aujourd'hui dans tous les dossiers${isFastMode ? ' (mode rapide)' : ''}`,
       );
 
       // Log de la valeur brute du paramètre limit
       this.logger.log(`Paramètre limit reçu: "${limit}"`);
 
-      // Récupération et analyse des emails
+      // Récupération des emails
+      const fetchStartTime = Date.now();
       const todayEmails = await this.analyzeEmailService.getAllTodayEmails();
+      const fetchEndTime = Date.now();
+
       this.logger.log(`Nombre total d'emails récupérés: ${todayEmails.length}`);
 
       if (todayEmails.length === 0) {
@@ -367,6 +457,12 @@ export class AnalyzeEmailController {
             categoryCounts: {},
             topPriorityEmails: [],
             actionItems: [],
+          },
+          performanceMetrics: {
+            totalDuration: Date.now() - startTime,
+            emailFetchDuration: fetchEndTime - fetchStartTime,
+            analysisDuration: 0,
+            summaryDuration: 0,
           },
         };
       }
@@ -388,24 +484,41 @@ export class AnalyzeEmailController {
           : todayEmails;
 
       this.logger.log(
-        `Analyse de ${emailsToAnalyze.length}/${todayEmails.length} emails (limite: ${limitValue || 'aucune'})`,
+        `Analyse de ${emailsToAnalyze.length}/${todayEmails.length} emails (limite: ${limitValue || 'aucune'})${isFastMode ? ' en mode rapide' : ''}`,
       );
 
-      // Vérifier que la limite a bien été appliquée
-      if (limitValue && limitValue > 0 && emailsToAnalyze.length > limitValue) {
-        this.logger.warn(
-          `La limite n'a pas été correctement appliquée: ${emailsToAnalyze.length} > ${limitValue}`,
-        );
-      }
+      // Analyse des emails
+      const analysisStartTime = Date.now();
+      const analyzedEmails = await this.analyzeEmailService.analyzeEmails(
+        emailsToAnalyze,
+        isFastMode,
+      );
+      const analysisEndTime = Date.now();
 
-      const analyzedEmails =
-        await this.analyzeEmailService.analyzeEmails(emailsToAnalyze);
+      // Génération du résumé
+      const summaryStartTime = Date.now();
       const overallSummary =
-        await this.analyzeEmailService.generateOverallSummary(analyzedEmails);
+        await this.analyzeEmailService.generateOverallSummary(
+          analyzedEmails,
+          isFastMode,
+        );
+      const summaryEndTime = Date.now();
+
+      // Calcul des métriques de performance
+      const performanceMetrics = {
+        totalDuration: Date.now() - startTime,
+        emailFetchDuration: fetchEndTime - fetchStartTime,
+        analysisDuration: analysisEndTime - analysisStartTime,
+        summaryDuration: summaryEndTime - summaryStartTime,
+      };
+
+      this.logger.log(
+        `Résumé généré en ${performanceMetrics.totalDuration}ms (récupération: ${performanceMetrics.emailFetchDuration}ms, analyse: ${performanceMetrics.analysisDuration}ms, résumé: ${performanceMetrics.summaryDuration}ms)`,
+      );
 
       return {
         status: 'success',
-        message: `Résumé généré pour ${analyzedEmails.length}/${todayEmails.length} emails (limite: ${limitValue || 'aucune'})`,
+        message: `Résumé généré pour ${analyzedEmails.length}/${todayEmails.length} emails (limite: ${limitValue || 'aucune'})${isFastMode ? ' en mode rapide' : ''}`,
         data: analyzedEmails,
         summary: {
           overview: overallSummary.summary,
@@ -417,6 +530,7 @@ export class AnalyzeEmailController {
           actionItems: overallSummary.actionItems,
           tokensUsed: overallSummary.tokensUsed,
         },
+        performanceMetrics,
       };
     } catch (error: unknown) {
       const errorMessage =
@@ -436,9 +550,10 @@ export class AnalyzeEmailController {
 
   /**
    * Endpoint dédié au résumé professionnel des emails (format structuré)
+   * @param fastMode Si true, utilise un mode rapide avec analyse optimisée (optionnel, par défaut: false)
    */
   @Get('professional-summary')
-  async getProfessionalSummary(): Promise<{
+  async getProfessionalSummary(@Query('fastMode') fastMode?: string): Promise<{
     status: string;
     message: string;
     professionalSummary: string;
@@ -447,14 +562,26 @@ export class AnalyzeEmailController {
       output: number;
       total: number;
     };
+    performanceMetrics?: {
+      totalDuration: number;
+      emailFetchDuration: number;
+      analysisDuration: number;
+      summaryDuration: number;
+      formattingDuration: number;
+    };
   }> {
     try {
+      const startTime = Date.now();
+      const isFastMode = fastMode === 'true';
+
       this.logger.log(
-        `Génération du résumé professionnel des emails non lus dans tous les dossiers`,
+        `Génération du résumé professionnel des emails non lus dans tous les dossiers${isFastMode ? ' (mode rapide)' : ''}`,
       );
 
-      // Récupération et analyse des emails
+      // Récupération des emails
+      const fetchStartTime = Date.now();
       const emails = await this.analyzeEmailService.getTodayEmails();
+      const fetchEndTime = Date.now();
 
       if (emails.length === 0) {
         return {
@@ -467,19 +594,54 @@ export class AnalyzeEmailController {
             output: 0,
             total: 0,
           },
+          performanceMetrics: {
+            totalDuration: Date.now() - startTime,
+            emailFetchDuration: fetchEndTime - fetchStartTime,
+            analysisDuration: 0,
+            summaryDuration: 0,
+            formattingDuration: 0,
+          },
         };
       }
 
-      const analyzedEmails =
-        await this.analyzeEmailService.analyzeEmails(emails);
-      const overallSummary =
-        await this.analyzeEmailService.generateOverallSummary(analyzedEmails);
+      // Analyse des emails
+      const analysisStartTime = Date.now();
+      const analyzedEmails = await this.analyzeEmailService.analyzeEmails(
+        emails,
+        isFastMode,
+      );
+      const analysisEndTime = Date.now();
 
-      // Utiliser le nouveau format professionnel
+      // Génération du résumé global
+      const summaryStartTime = Date.now();
+      const overallSummary =
+        await this.analyzeEmailService.generateOverallSummary(
+          analyzedEmails,
+          isFastMode,
+        );
+      const summaryEndTime = Date.now();
+
+      // Génération du format professionnel
+      const formattingStartTime = Date.now();
       const professionalSummaryResult =
         await this.analyzeEmailService.formatProfessionalSummary(
           overallSummary,
+          isFastMode,
         );
+      const formattingEndTime = Date.now();
+
+      // Calculer les métriques de performance
+      const performanceMetrics = {
+        totalDuration: Date.now() - startTime,
+        emailFetchDuration: fetchEndTime - fetchStartTime,
+        analysisDuration: analysisEndTime - analysisStartTime,
+        summaryDuration: summaryEndTime - summaryStartTime,
+        formattingDuration: formattingEndTime - formattingStartTime,
+      };
+
+      this.logger.log(
+        `Résumé professionnel généré en ${performanceMetrics.totalDuration}ms (récupération: ${performanceMetrics.emailFetchDuration}ms, analyse: ${performanceMetrics.analysisDuration}ms, résumé: ${performanceMetrics.summaryDuration}ms, formatage: ${performanceMetrics.formattingDuration}ms)`,
+      );
 
       // Calculer le total des tokens utilisés (analyse d'emails + résumé + format professionnel)
       const totalTokensUsed = {
@@ -499,9 +661,10 @@ export class AnalyzeEmailController {
 
       return {
         status: 'success',
-        message: `Résumé professionnel généré pour ${analyzedEmails.length} emails non lus`,
+        message: `Résumé professionnel généré pour ${analyzedEmails.length} emails non lus${isFastMode ? ' (mode rapide)' : ''}`,
         professionalSummary: professionalSummaryResult.formattedSummary,
         tokensUsed: totalTokensUsed,
+        performanceMetrics,
       };
     } catch (error: unknown) {
       const errorMessage =

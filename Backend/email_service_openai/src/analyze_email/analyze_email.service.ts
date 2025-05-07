@@ -4,11 +4,9 @@ import * as Imap from 'node-imap';
 import { simpleParser, ParsedMail } from 'mailparser';
 import OpenAI from 'openai';
 
-// Constantes pour le traitement par lots
-const BATCH_SIZE = 5;
-const BATCH_DELAY_MS = 2000;
+const BATCH_SIZE = 20;
+const BATCH_DELAY_MS = 500;
 
-// Exporter l'interface pour qu'elle soit disponible dans le contrôleur
 export interface EmailContent {
   id: string;
   from: string;
@@ -16,8 +14,8 @@ export interface EmailContent {
   subject: string;
   date: Date;
   body: string;
-  folderPath?: string; // Ajout du chemin du dossier où se trouve l'email
-  imapUID?: string;    // Identifiant unique IMAP de l'email
+  folderPath?: string;
+  imapUID?: string;
   analysis?: {
     summary: string;
     priority: 'high' | 'medium' | 'low';
@@ -245,7 +243,7 @@ export class AnalyzeEmailService {
                   const fetch = this.imap.fetch(results, {
                     bodies: [''],
                     struct: true,
-                    uid: true
+                    uid: true,
                   }) as ImapFetch;
 
                   fetch.on('message', (msg: ImapMessage, seqno: number) => {
@@ -255,7 +253,7 @@ export class AnalyzeEmailService {
                           id: String(seqno),
                           folderPath: folder,
                         };
-                        
+
                         // Capturer l'UID IMAP
                         msg.once('attributes', (attrs) => {
                           if (attrs && attrs.uid) {
@@ -453,7 +451,7 @@ export class AnalyzeEmailService {
                   const fetch = this.imap.fetch(results, {
                     bodies: [''],
                     struct: true,
-                    uid: true
+                    uid: true,
                   }) as ImapFetch;
 
                   fetch.on('message', (msg: ImapMessage, seqno: number) => {
@@ -463,7 +461,7 @@ export class AnalyzeEmailService {
                           id: String(seqno),
                           folderPath: folder,
                         };
-                        
+
                         // Capturer l'UID IMAP
                         msg.once('attributes', (attrs) => {
                           if (attrs && attrs.uid) {
@@ -579,15 +577,22 @@ export class AnalyzeEmailService {
 
   /**
    * Analyse le contenu des emails avec OpenAI
+   * @param emails Liste des emails à analyser
+   * @param fastMode Si true, effectue une analyse accélérée avec moins de détails
    */
-  async analyzeEmails(emails: EmailContent[]): Promise<EmailContent[]> {
-    this.logger.log(`Début de l'analyse de ${emails.length} emails`);
+  async analyzeEmails(
+    emails: EmailContent[],
+    fastMode = false,
+  ): Promise<EmailContent[]> {
+    this.logger.log(
+      `Début de l'analyse de ${emails.length} emails${fastMode ? ' (mode rapide)' : ''}`,
+    );
 
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
 
     // Traiter les emails par lots pour éviter de surcharger l'API
-    const analyzedEmails = await this.processEmailsInBatches(emails);
+    const analyzedEmails = await this.processEmailsInBatches(emails, fastMode);
 
     // Calculer le total des tokens utilisés
     analyzedEmails.forEach((email) => {
@@ -606,50 +611,94 @@ export class AnalyzeEmailService {
   /**
    * Traite les emails par lots pour éviter de surcharger l'API OpenAI
    * @param emails Liste des emails à traiter
+   * @param fastMode Si true, utilise des techniques d'optimisation supplémentaires
    */
   private async processEmailsInBatches(
     emails: EmailContent[],
+    fastMode = false,
   ): Promise<EmailContent[]> {
     this.logger.log(
-      `Traitement des emails par lots: ${emails.length} emails au total, ${BATCH_SIZE} emails par lot`,
+      `Traitement des emails par lots: ${emails.length} emails au total, ${BATCH_SIZE} emails par lot${fastMode ? ' (mode rapide)' : ''}`,
     );
 
     const analyzedEmails: EmailContent[] = [];
 
+    // Cache simple pour éviter de réanalyser des emails très similaires
+    const analysisCache = new Map<string, any>();
+
     // Diviser les emails en lots
+    const batches: EmailContent[][] = [];
     for (let i = 0; i < emails.length; i += BATCH_SIZE) {
-      const batch = emails.slice(i, i + BATCH_SIZE);
+      batches.push(emails.slice(i, i + BATCH_SIZE));
+    }
+
+    // Traiter plusieurs lots en parallèle (jusqu'à 3 lots simultanément, 5 en mode rapide)
+    const PARALLEL_BATCHES = fastMode ? 5 : 3;
+    for (let i = 0; i < batches.length; i += PARALLEL_BATCHES) {
+      const currentBatches = batches.slice(i, i + PARALLEL_BATCHES);
+
       this.logger.log(
-        `Traitement du lot ${i / BATCH_SIZE + 1}/${Math.ceil(emails.length / BATCH_SIZE)} (${batch.length} emails)`,
+        `Traitement parallèle des lots ${i / PARALLEL_BATCHES + 1} à ${Math.min(
+          (i + PARALLEL_BATCHES) / PARALLEL_BATCHES,
+          Math.ceil(batches.length / PARALLEL_BATCHES),
+        )} sur ${Math.ceil(batches.length / PARALLEL_BATCHES)}`,
       );
 
-      // Analyser le lot d'emails
+      // Traiter ces lots en parallèle
       const batchResults = await Promise.all(
-        batch.map(async (email) => {
-          try {
-            const analysisResult = await this.analyzeEmailContent(email);
-            return {
-              ...email,
-              analysis: analysisResult,
-            };
-          } catch (error) {
-            this.logger.error(
-              `Erreur lors de l'analyse de l'email ${email.id}: ${error instanceof Error ? error.message : String(error)}`,
-            );
-            return email;
-          }
+        currentBatches.map(async (batch) => {
+          return Promise.all(
+            batch.map(async (email) => {
+              try {
+                // Créer une clé de cache basée sur l'expéditeur et le sujet
+                const cacheKey = `${email.from}:${email.subject}`;
+
+                // Vérifier si un email similaire a déjà été analysé
+                if (analysisCache.has(cacheKey)) {
+                  this.logger.debug(
+                    `Utilisation du cache pour l'email ${email.id}: ${email.subject}`,
+                  );
+                  return {
+                    ...email,
+                    analysis: analysisCache.get(cacheKey),
+                  };
+                }
+
+                const analysisResult = await this.analyzeEmailContent(
+                  email,
+                  fastMode,
+                );
+
+                // Stocker le résultat dans le cache
+                analysisCache.set(cacheKey, analysisResult);
+
+                return {
+                  ...email,
+                  analysis: analysisResult,
+                };
+              } catch (error) {
+                this.logger.error(
+                  `Erreur lors de l'analyse de l'email ${email.id}: ${error instanceof Error ? error.message : String(error)}`,
+                );
+                return email;
+              }
+            }),
+          );
         }),
       );
 
-      // Ajouter les résultats du lot au tableau global
-      analyzedEmails.push(...batchResults);
+      // Ajouter les résultats des lots au tableau global
+      batchResults.forEach((batchResult) => {
+        analyzedEmails.push(...batchResult);
+      });
 
-      // Si ce n'est pas le dernier lot, attendre avant de continuer
-      if (i + BATCH_SIZE < emails.length) {
+      // Si ce n'est pas le dernier ensemble de lots, attendre avant de continuer (moins d'attente en mode rapide)
+      if (i + PARALLEL_BATCHES < batches.length) {
+        const delay = fastMode ? BATCH_DELAY_MS / 2 : BATCH_DELAY_MS;
         this.logger.log(
-          `Attente de ${BATCH_DELAY_MS / 1000} secondes avant le prochain lot...`,
+          `Attente de ${delay / 1000} secondes avant le prochain groupe de lots...`,
         );
-        await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY_MS));
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
 
@@ -658,8 +707,13 @@ export class AnalyzeEmailService {
 
   /**
    * Analyse un email individuel avec OpenAI
+   * @param email Email à analyser
+   * @param fastMode Si true, utilise un modèle plus rapide et moins détaillé
    */
-  private async analyzeEmailContent(email: EmailContent): Promise<{
+  private async analyzeEmailContent(
+    email: EmailContent,
+    fastMode = false,
+  ): Promise<{
     summary: string;
     priority: 'high' | 'medium' | 'low';
     category: string;
@@ -673,102 +727,113 @@ export class AnalyzeEmailService {
   }> {
     this.logger.debug(`Analyse de l'email: ${email.subject}`);
 
-    // Préparer le contenu pour l'analyse
+    // Extraire les premiers caractères du contenu (moins en mode rapide)
+    const contentLength = fastMode ? 600 : 800;
+    const emailContent = email.body.substring(0, contentLength);
+
+    // Prompt condensé pour réduire les tokens d'entrée
     const prompt = `
-    Analyser cet email et fournir les informations suivantes:
+    Email - De: ${email.from} | Sujet: ${email.subject} | Date: ${email.date.toISOString()}
     
-    Email de: ${email.from}
-    À: ${email.to}
-    Sujet: ${email.subject}
-    Date: ${email.date.toISOString()}
+    Contenu: ${emailContent}
     
-    Contenu:
-    ${email.body.substring(0, 1500)}
-    
-    Fournir:
-    1. Un résumé concis (max 2 phrases)
-    2. Niveau de priorité (high, medium, low)
-    3. Catégorie (personnel, professionnel, marketing, facture, administratif, autre)
-    4. Si une action est requise (true/false)
-    5. Si une action est requise, liste des actions à prendre
-    
-    IMPORTANT pour les actions à prendre:
-    - Les actions doivent être directement liées au contenu spécifique de l'email
-    - Pour les confirmations de rendez-vous/réunions: suggérer "Confirmer le rendez-vous" ou "Ajouter à l'agenda" 
-    - Éviter les actions génériques qui ne découlent pas directement du contenu de l'email
-    - Si l'email nécessite une réponse, ajouter l'action "Répondre à cet email"
-    - Suggérer "Répondre à cet email" si pertinent
-    
-    Réponse au format JSON strict avec les clés: summary, priority, category, actionRequired, actionItems (si applicable)
+    Analyser et retourner au format JSON:
+    - summary: résumé concis (max 2 phrases)
+    - priority: "high", "medium", ou "low"
+    - category: "personnel", "professionnel", "marketing", "facture", "administratif", "sécurité" ou "autre"
+    - actionRequired: true/false
+    - actionItems: liste d'actions spécifiques si actionRequired est true${fastMode ? ' (limiter à 1 action principale)' : ''}
     `;
 
-    const response = await this.openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [
-        {
-          role: 'system',
-          content:
-            "Tu es un assistant spécialisé dans l'analyse d'emails. Réponds uniquement au format JSON sans aucun autre texte ni délimiteur markdown.",
-        },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.3,
-    });
-
-    // Extraire les informations sur les tokens
-    const tokensUsed = {
-      input: response.usage?.prompt_tokens || 0,
-      output: response.usage?.completion_tokens || 0,
-      total: response.usage?.total_tokens || 0,
-    };
-
-    this.logger.debug(
-      `Tokens utilisés pour l'analyse: ${tokensUsed.total} (entrée: ${tokensUsed.input}, sortie: ${tokensUsed.output})`,
-    );
-
     try {
-      const content = response.choices[0].message.content;
-      if (!content) {
-        throw new Error('Aucune réponse générée par OpenAI');
+      // En mode rapide, utiliser un modèle encore plus léger et limiter davantage les tokens
+      const model = fastMode ? 'gpt-3.5-turbo-instruct' : 'gpt-3.5-turbo-1106';
+      const maxTokens = fastMode ? 200 : 300;
+
+      const response = await this.openai.chat.completions.create({
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: "Analyse d'emails - réponds uniquement en JSON valide",
+          },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.1,
+        response_format: { type: 'json_object' },
+        max_tokens: maxTokens,
+      });
+
+      // Extraire les informations sur les tokens
+      const tokensUsed = {
+        input: response.usage?.prompt_tokens || 0,
+        output: response.usage?.completion_tokens || 0,
+        total: response.usage?.total_tokens || 0,
+      };
+
+      this.logger.debug(
+        `Tokens utilisés pour l'analyse: ${tokensUsed.total} (entrée: ${tokensUsed.input}, sortie: ${tokensUsed.output})`,
+      );
+
+      try {
+        const content = response.choices[0].message.content;
+        if (!content) {
+          throw new Error('Aucune réponse générée par OpenAI');
+        }
+
+        // Avec response_format type JSON, nous pouvons directement parser le contenu
+        const parsedResult = JSON.parse(content) as {
+          summary: string;
+          priority: 'high' | 'medium' | 'low';
+          category: string;
+          actionRequired: boolean;
+          actionItems?: string[];
+        };
+
+        // Ajouter les informations sur les tokens utilisés
+        return {
+          ...parsedResult,
+          tokensUsed,
+        };
+      } catch (error) {
+        this.logger.error(
+          `Erreur lors du parsing de la réponse OpenAI: ${error instanceof Error ? error.message : 'Erreur inconnue'}`,
+        );
+        return {
+          summary: "Impossible d'analyser cet email",
+          priority: 'medium',
+          category: 'autre',
+          actionRequired: false,
+          tokensUsed,
+        };
       }
-
-      // Extraire le JSON de la réponse
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      const jsonString = jsonMatch ? jsonMatch[0] : content;
-
-      const parsedResult = JSON.parse(jsonString) as {
-        summary: string;
-        priority: 'high' | 'medium' | 'low';
-        category: string;
-        actionRequired: boolean;
-        actionItems?: string[];
-      };
-
-      // Ajouter les informations sur les tokens utilisés
-      return {
-        ...parsedResult,
-        tokensUsed,
-      };
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Erreur inconnue';
+    } catch (error) {
       this.logger.error(
-        `Erreur lors du parsing de la réponse OpenAI: ${errorMessage}`,
+        `Erreur lors de l'appel à l'API OpenAI: ${error instanceof Error ? error.message : 'Erreur inconnue'}`,
       );
       return {
         summary: "Impossible d'analyser cet email",
         priority: 'medium',
         category: 'autre',
         actionRequired: false,
-        tokensUsed,
+        tokensUsed: {
+          input: 0,
+          output: 0,
+          total: 0,
+        },
       };
     }
   }
 
   /**
    * Génère un résumé général de tous les emails analysés
+   * @param analyzedEmails Liste des emails analysés
+   * @param fastMode Si true, génère un résumé plus concis
    */
-  async generateOverallSummary(analyzedEmails: EmailContent[]): Promise<{
+  async generateOverallSummary(
+    analyzedEmails: EmailContent[],
+    fastMode = false,
+  ): Promise<{
     summary: string;
     totalEmails: number;
     highPriorityCount: number;
@@ -832,7 +897,66 @@ export class AnalyzeEmailService {
       }
     });
 
-    // Générer un résumé global avec OpenAI
+    // En mode rapide, générer un résumé basique sans appel supplémentaire à OpenAI
+    if (fastMode) {
+      // Obtenir la date du jour au format JJ/MM/AAAA
+      const today = new Date();
+      const day = today.getDate().toString().padStart(2, '0');
+      const month = (today.getMonth() + 1).toString().padStart(2, '0');
+      const year = today.getFullYear();
+      const formattedDate = `${day}/${month}/${year}`;
+
+      // Créer un résumé automatique sans appel à OpenAI
+      let summary = `Bonjour, voici votre résumé d'emails du ${formattedDate}.\n\n`;
+
+      summary += `J'ai analysé ${totalEmails} emails aujourd'hui`;
+      if (highPriorityEmails.length > 0) {
+        summary += `, dont ${highPriorityEmails.length} nécessitent votre attention prioritaire`;
+      }
+      if (actionRequiredEmails.length > 0) {
+        summary += ` et ${actionRequiredEmails.length} requièrent une action de votre part`;
+      }
+      summary += `.\n\n`;
+
+      // Liste des emails prioritaires
+      if (highPriorityEmails.length > 0) {
+        summary += `Les emails les plus importants sont:\n`;
+        highPriorityEmails.slice(0, 3).forEach((email, i) => {
+          summary += `${i + 1}. "${email.subject}" de ${email.from.split('<')[0].replace(/"/g, '')}\n`;
+        });
+        summary += `\n`;
+      }
+
+      // Liste des actions
+      if (allActionItems.length > 0) {
+        summary += `Actions principales à effectuer:\n`;
+        const actions = [...new Set(allActionItems)].slice(0, 5);
+        actions.forEach((action, i) => {
+          summary += `${i + 1}. ${action}\n`;
+        });
+        summary += `\n`;
+      }
+
+      // Créer token count simulé (puisque nous n'avons pas fait d'appel API)
+      const tokensUsed = {
+        input: 0,
+        output: 0,
+        total: 0,
+      };
+
+      return {
+        summary,
+        totalEmails,
+        highPriorityCount: highPriorityEmails.length,
+        actionRequiredCount: actionRequiredEmails.length,
+        categoryCounts,
+        topPriorityEmails: highPriorityEmails.slice(0, 3),
+        actionItems: allActionItems.slice(0, 5),
+        tokensUsed,
+      };
+    }
+
+    // Générer un résumé global avec OpenAI (mode normal)
 
     // Obtenir la date du jour au format JJ/MM/AAAA
     const today = new Date();
@@ -1119,21 +1243,25 @@ export class AnalyzeEmailService {
   /**
    * Formate le résumé en un format professionnel structuré
    * @param summaryData Données du résumé à formater
+   * @param fastMode Si true, crée un format plus simple et direct
    */
-  async formatProfessionalSummary(summaryData: {
-    summary: string;
-    totalEmails: number;
-    highPriorityCount: number;
-    actionRequiredCount: number;
-    categoryCounts: Record<string, number>;
-    topPriorityEmails: EmailContent[];
-    actionItems: string[];
-    tokensUsed?: {
-      input: number;
-      output: number;
-      total: number;
-    };
-  }): Promise<{
+  async formatProfessionalSummary(
+    summaryData: {
+      summary: string;
+      totalEmails: number;
+      highPriorityCount: number;
+      actionRequiredCount: number;
+      categoryCounts: Record<string, number>;
+      topPriorityEmails: EmailContent[];
+      actionItems: string[];
+      tokensUsed?: {
+        input: number;
+        output: number;
+        total: number;
+      };
+    },
+    fastMode = false,
+  ): Promise<{
     formattedSummary: string;
     tokensUsed: {
       input: number;
@@ -1166,24 +1294,65 @@ export class AnalyzeEmailService {
 
       // Aperçu du nombre d'emails
       formattedSummary += `J'ai analysé ${summaryData.totalEmails} emails aujourd'hui`;
-      
+
       if (summaryData.highPriorityCount > 0) {
         formattedSummary += `, dont ${summaryData.highPriorityCount} nécessitent votre attention prioritaire`;
       }
-      
+
       if (summaryData.actionRequiredCount > 0) {
         formattedSummary += ` et ${summaryData.actionRequiredCount} requièrent une action de votre part`;
       }
       formattedSummary += `.\n\n`;
 
+      // En mode rapide, simplifier la sortie
+      if (fastMode) {
+        // Emails prioritaires sous forme de liste
+        if (
+          summaryData.topPriorityEmails &&
+          summaryData.topPriorityEmails.length > 0
+        ) {
+          formattedSummary += `Emails prioritaires:\n`;
+          summaryData.topPriorityEmails.slice(0, 3).forEach((email, index) => {
+            formattedSummary += `${index + 1}. "${email.subject}" de ${email.from.split('<')[0].replace(/"/g, '')}\n`;
+          });
+          formattedSummary += `\n`;
+        }
+
+        // Actions requises
+        if (summaryData.actionItems && summaryData.actionItems.length > 0) {
+          formattedSummary += `Actions requises:\n`;
+          const uniqueActions = [...new Set(summaryData.actionItems)].slice(
+            0,
+            5,
+          );
+          uniqueActions.forEach((action, index) => {
+            formattedSummary += `${index + 1}. ${action}\n`;
+          });
+          formattedSummary += `\n`;
+        }
+
+        // Résumé succinct
+        formattedSummary += `En résumé: ${summaryData.summary}`;
+
+        return {
+          formattedSummary,
+          tokensUsed: initialTokensUsed,
+        };
+      }
+
+      // Format standard (non rapide) avec plus de détails
       // Emails prioritaires
-      if (summaryData.topPriorityEmails && summaryData.topPriorityEmails.length > 0) {
+      if (
+        summaryData.topPriorityEmails &&
+        summaryData.topPriorityEmails.length > 0
+      ) {
         formattedSummary += `Les emails les plus importants concernent `;
-        
-        const emailSubjects = summaryData.topPriorityEmails.map(email => 
-          `"${email.subject}" de ${email.from.split('<')[0].replace(/"/g, '')}`
+
+        const emailSubjects = summaryData.topPriorityEmails.map(
+          (email) =>
+            `"${email.subject}" de ${email.from.split('<')[0].replace(/"/g, '')}`,
         );
-        
+
         if (emailSubjects.length === 1) {
           formattedSummary += `${emailSubjects[0]}`;
         } else if (emailSubjects.length === 2) {
@@ -1213,13 +1382,16 @@ export class AnalyzeEmailService {
       }
 
       // Résumé des catégories d'emails
-      if (summaryData.categoryCounts && Object.keys(summaryData.categoryCounts).length > 0) {
+      if (
+        summaryData.categoryCounts &&
+        Object.keys(summaryData.categoryCounts).length > 0
+      ) {
         formattedSummary += `Vos emails se répartissent principalement entre `;
-        
+
         const categories = Object.entries(summaryData.categoryCounts)
           .sort((a, b) => b[1] - a[1])
           .map(([category, count]) => `${count} emails ${category}s`);
-        
+
         if (categories.length === 1) {
           formattedSummary += `${categories[0]}`;
         } else if (categories.length === 2) {
@@ -1245,7 +1417,8 @@ export class AnalyzeEmailService {
         `Erreur lors du formatage professionnel du résumé: ${errorMessage}`,
       );
       return {
-        formattedSummary: 'Impossible de générer le résumé conversationnel de vos emails.',
+        formattedSummary:
+          'Impossible de générer le résumé conversationnel de vos emails.',
         tokensUsed: {
           input: 0,
           output: 0,
