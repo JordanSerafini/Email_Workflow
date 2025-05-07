@@ -5,8 +5,8 @@ import { simpleParser, ParsedMail } from 'mailparser';
 import OpenAI from 'openai';
 
 // Constantes pour le traitement par lots
-const BATCH_SIZE = 5; // Nombre d'emails à traiter par lot
-const BATCH_DELAY_MS = 2000; // Délai entre les lots en millisecondes
+const BATCH_SIZE = 5;
+const BATCH_DELAY_MS = 2000;
 
 // Exporter l'interface pour qu'elle soit disponible dans le contrôleur
 export interface EmailContent {
@@ -89,18 +89,24 @@ export class AnalyzeEmailService {
       apiKey: this.configService.get<string>('OPENAI_API_KEY'),
     });
 
+    const imapUser = this.configService.get<string>('EMAIL_USER') ?? '';
+    const imapPassword = this.configService.get<string>('EMAIL_PASSWORD') ?? '';
+    const imapHost = this.configService.get<string>('IMAP_HOST') ?? '';
+    const imapPortConfig = this.configService.get<string>('IMAP_PORT');
+    const imapPort = imapPortConfig ? parseInt(imapPortConfig, 10) : 993;
+
     const imapConfig: Imap.Config = {
-      user: this.configService.get<string>('EMAIL_USER') || '',
-      password: this.configService.get<string>('EMAIL_PASSWORD') || '',
-      host: this.configService.get<string>('IMAP_HOST') || '',
-      port: parseInt(this.configService.get<string>('IMAP_PORT') || '993', 10),
+      user: imapUser,
+      password: imapPassword,
+      host: imapHost,
+      port: imapPort,
       tls: true,
       tlsOptions: { rejectUnauthorized: false },
       debug: (info: string) => this.logger.debug(`IMAP Debug: ${info}`),
     };
 
     this.logger.log(
-      `Configuration IMAP: ${imapConfig.host}:${imapConfig.port}, utilisateur: ${imapConfig.user}`,
+      `Configuration IMAP: ${imapHost}:${imapPort}, utilisateur: ${imapUser}`,
     );
     this.imap = new Imap(imapConfig) as TypedImap;
   }
@@ -259,9 +265,11 @@ export class AnalyzeEmailService {
                                 this.logger.debug(
                                   `Parsing du contenu de l'email #${seqno} dans ${folder}`,
                                 );
+                                const bufferContent: Buffer =
+                                  Buffer.from(buffer);
                                 const parsedEmail: ParsedMail =
-                                  await simpleParser(buffer);
-                                const parsed =
+                                  await simpleParser(bufferContent);
+                                const parsed: ParsedEmail =
                                   parsedEmail as unknown as ParsedEmail;
 
                                 email.from = parsed.from?.text || '';
@@ -457,9 +465,11 @@ export class AnalyzeEmailService {
                                 this.logger.debug(
                                   `Parsing du contenu de l'email #${seqno} dans ${folder}`,
                                 );
+                                const bufferContent: Buffer =
+                                  Buffer.from(buffer);
                                 const parsedEmail: ParsedMail =
-                                  await simpleParser(buffer);
-                                const parsed =
+                                  await simpleParser(bufferContent);
+                                const parsed: ParsedEmail =
                                   parsedEmail as unknown as ParsedEmail;
 
                                 email.from = parsed.from?.text || '';
@@ -829,40 +839,17 @@ export class AnalyzeEmailService {
       )
       .join('\n\n')}
     
-    Formater votre réponse avec cette structure précise:
-
-    "Voici le résumé de vos emails du ${formattedDate}
-
-    ### Emails prioritaires
-    ${highPriorityEmails.length > 0 ? '' : "Aucun email prioritaire aujourd'hui"}
-    ${highPriorityEmails
-      .map(
-        (email) => `**[${email.subject}]** - [${email.from}]
-• [${email.analysis?.summary || 'Pas de résumé'}]
-• [${email.analysis?.actionItems?.join(', ') || 'Aucune action requise'}]`,
-      )
-      .join('\n\n')}
-
-    ### Emails professionnels
-    ${analyzedEmails.filter((e) => e.analysis?.category === 'professionnel').length > 0 ? '' : "Aucun email professionnel aujourd'hui"}
+    Générer un résumé concis et direct sans utiliser de placeholders.
     
-    ### Actions requises
-    ${allActionItems.length > 0 ? '' : "Aucune action requise aujourd'hui"}
-    ${allActionItems.length > 0 ? '1. [Action 1]' : ''}
-    ${allActionItems.length > 1 ? '2. [Action 2]' : ''}
-    ${allActionItems.length > 2 ? '3. [Action 3]' : ''}
+    Structure:
+    1. Un titre clair "Résumé des emails du [date]"
+    2. Section "Emails prioritaires" - listez les emails prioritaires avec leur sujet, expéditeur et résumé
+    3. Section "Emails professionnels" - listez les emails professionnels importants
+    4. Section "Actions requises" - listez les actions spécifiques à entreprendre, numérotées
+    5. Section "Autres emails" - résumez brièvement les autres emails par catégorie
     
-    ### Autres emails
-    [Résumé des autres emails moins importants]"
-
-    Remplace chaque placeholder entre crochets par le contenu approprié.
-    Pour les emails prioritaires et professionnels, liste les emails individuellement avec leur sujet et expéditeur en gras.
-    Pour les actions requises, liste les 3-5 actions les plus importantes à entreprendre, triées par priorité.
-    Pour les autres emails, fais un bref résumé groupé des emails restants par catégorie.
-    
-    Limite la description de chaque email à 1-2 phrases MAXIMUM.
-    Mentionne des détails spécifiques (dates, heures, montants) quand ils sont disponibles.
-    Utilise un ton direct et factuel.
+    Utilisez un style concis et direct, avec une phrase maximum par point.
+    N'utilisez pas de placeholders comme [Action 1] ou [Résumé des autres emails].
     `;
 
     try {
@@ -894,8 +881,11 @@ export class AnalyzeEmailService {
         response.choices[0].message.content ||
         'Impossible de générer un résumé';
 
+      // Remplacer le placeholder [date] par la date réelle formatée
+      const formattedSummary = summary.replace('[date]', formattedDate);
+
       return {
-        summary,
+        summary: formattedSummary,
         totalEmails,
         highPriorityCount: highPriorityEmails.length,
         actionRequiredCount: actionRequiredEmails.length,

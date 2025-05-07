@@ -33,10 +33,11 @@ export class SortEmailController {
   }
 
   @Post('sort')
-  async sortEmails() {
+  async sortEmails(@Body() body?: { limit?: number }) {
     try {
       this.logger.log('Démarrage du processus de tri des emails...');
-      const sortedEmails = await this.sortEmailService.sortEmails();
+      const limit = body?.limit;
+      const sortedEmails = await this.sortEmailService.sortEmails(limit);
 
       this.logger.log(
         'Emails triés, début du déplacement vers les dossiers appropriés...',
@@ -67,10 +68,11 @@ export class SortEmailController {
   }
 
   @Post('sort-all')
-  async sortAllEmails() {
+  async sortAllEmails(@Body() body?: { limit?: number }) {
     try {
       this.logger.log('Démarrage du processus de tri de tous les emails...');
-      const sortedEmails = await this.sortEmailService.sortAllEmails();
+      const limit = body?.limit;
+      const sortedEmails = await this.sortEmailService.sortAllEmails(limit);
 
       this.logger.log(
         'Tous les emails triés, début du déplacement vers les dossiers appropriés...',
@@ -108,10 +110,11 @@ export class SortEmailController {
    * SANS déplacer ou classer les emails
    */
   @Post('analyze-invoices')
-  async analyzeInvoices() {
+  async analyzeInvoices(@Body() body?: { limit?: number }) {
     try {
       // D'abord trier les emails
-      const sortedEmails = await this.sortEmailService.sortEmails();
+      const limit = body?.limit;
+      const sortedEmails = await this.sortEmailService.sortEmails(limit);
 
       // Récupérer les emails classés comme "Factures"
       const invoiceEmails = sortedEmails['Factures'] || [];
@@ -150,13 +153,15 @@ export class SortEmailController {
   }
 
   @Post('sort-by-category')
-  async sortByCategory(@Body() body: { category: string }): Promise<{
+  async sortByCategory(
+    @Body() body: { category: string; limit?: number },
+  ): Promise<{
     success: boolean;
     message: string;
     emailsProcessed: number;
   }> {
     try {
-      const { category } = body;
+      const { category, limit } = body;
       if (!category) {
         return {
           success: false,
@@ -166,8 +171,10 @@ export class SortEmailController {
       }
 
       // Appeler le service pour trier les emails par catégorie
-      const emailsProcessed =
-        await this.sortEmailService.sortEmailsByCategory(category);
+      const emailsProcessed = await this.sortEmailService.sortEmailsByCategory(
+        category,
+        limit,
+      );
 
       return {
         success: true,
@@ -189,11 +196,12 @@ export class SortEmailController {
    * SANS déplacer ou classer les emails
    */
   @Post('analyze-all-folders/unread')
-  async analyzeUnreadEmailsFromAllFolders() {
+  async analyzeUnreadEmailsFromAllFolders(@Body() body?: { limit?: number }) {
     try {
       // Trier les emails non lus de tous les dossiers (sans déplacement)
+      const limit = body?.limit;
       const sortedEmails =
-        await this.sortEmailService.sortEmailsFromAllFolders();
+        await this.sortEmailService.sortEmailsFromAllFolders(limit);
 
       // Récupérer les emails classés comme "Factures"
       const invoiceEmails = sortedEmails['Factures'] || [];
@@ -238,11 +246,12 @@ export class SortEmailController {
    * SANS déplacer ou classer les emails
    */
   @Post('analyze-all-folders/all')
-  async analyzeAllEmailsFromAllFolders() {
+  async analyzeAllEmailsFromAllFolders(@Body() body?: { limit?: number }) {
     try {
       // Trier tous les emails de tous les dossiers (sans déplacement)
+      const limit = body?.limit;
       const sortedEmails =
-        await this.sortEmailService.sortAllEmailsFromAllFolders();
+        await this.sortEmailService.sortAllEmailsFromAllFolders(limit);
 
       // Récupérer les emails classés comme "Factures"
       const invoiceEmails = sortedEmails['Factures'] || [];

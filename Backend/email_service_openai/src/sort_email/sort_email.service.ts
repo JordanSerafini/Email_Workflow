@@ -70,6 +70,8 @@ export class SortEmailService implements OnModuleInit {
       port: parseInt(this.configService.get<string>('IMAP_PORT') || '993', 10),
       tls: true,
       tlsOptions: { rejectUnauthorized: false },
+      connTimeout: 60000, // 60 secondes au lieu de 10
+      authTimeout: 60000, // 60 secondes pour l'authentification
       debug: (info: any) => this.logger.debug(`IMAP Debug: ${info}`),
     };
 
@@ -150,7 +152,7 @@ export class SortEmailService implements OnModuleInit {
   /**
    * Récupère les emails non lus
    */
-  async getUnsortedEmails(): Promise<Email[]> {
+  async getUnsortedEmails(limit?: number): Promise<Email[]> {
     try {
       await this.connectToImap();
 
@@ -194,8 +196,13 @@ export class SortEmailService implements OnModuleInit {
             `${results.length} emails non lus trouvés. Chargement du contenu...`,
           );
 
+          const finalResults = limit ? results.slice(0, limit) : results;
+          this.logger.log(
+            `Traitement de ${finalResults.length} emails (limite: ${limit})`,
+          );
+
           const emailPromises: Promise<Email>[] = [];
-          const fetch = this.imap.fetch(results, {
+          const fetch = this.imap.fetch(finalResults, {
             bodies: [''],
             struct: true,
             markSeen: false,
@@ -297,7 +304,7 @@ export class SortEmailService implements OnModuleInit {
   /**
    * Récupère tous les emails
    */
-  async getAllEmails(): Promise<Email[]> {
+  async getAllEmails(limit?: number): Promise<Email[]> {
     try {
       await this.connectToImap();
 
@@ -333,8 +340,13 @@ export class SortEmailService implements OnModuleInit {
             `${results.length} emails trouvés. Chargement du contenu...`,
           );
 
+          const finalResults = limit ? results.slice(0, limit) : results;
+          this.logger.log(
+            `Traitement de ${finalResults.length} emails (limite: ${limit})`,
+          );
+
           const emailPromises: Promise<Email>[] = [];
-          const fetch = this.imap.fetch(results, {
+          const fetch = this.imap.fetch(finalResults, {
             bodies: [''],
             struct: true,
             markSeen: false,
@@ -498,11 +510,14 @@ export class SortEmailService implements OnModuleInit {
   /**
    * Tri les emails en utilisant l'API OpenAI
    */
-  async sortEmails(): Promise<{ [category: string]: Email[] }> {
+  async sortEmails(limit?: number): Promise<{ [category: string]: Email[] }> {
     try {
       this.logger.log('Démarrage du processus de tri des emails...');
-      const emails = await this.getUnsortedEmails();
+      const emails = await this.getUnsortedEmails(limit);
       this.logger.log(`Nombre total d'emails à trier: ${emails.length}`);
+
+      // Afficher les UIDs des emails récupérés pour le débogage
+      this.logger.debug(`UIDs des emails récupérés: ${emails.map(e => (e as any).uid).join(', ')}`);
 
       const sortedEmails: { [category: string]: Email[] } = {};
 
@@ -529,6 +544,13 @@ export class SortEmailService implements OnModuleInit {
         const count = sortedEmails[category].length;
         if (count > 0) {
           this.logger.log(`- ${category}: ${count} email(s)`);
+          
+          // Afficher les UIDs par catégorie pour le débogage
+          this.logger.debug(
+            `UIDs des emails dans la catégorie "${category}": ${sortedEmails[category]
+              .map(e => (e as any).uid)
+              .join(', ')}`
+          );
         }
       }
 
@@ -549,18 +571,20 @@ export class SortEmailService implements OnModuleInit {
   }): Promise<void> {
     try {
       this.logger.log('Début du traitement des emails triés...');
-      
+
       // S'assurer que la connexion IMAP est active
       try {
         if (!this.imap.state || this.imap.state === 'disconnected') {
-          this.logger.log('Reconnexion IMAP nécessaire, reconnexion en cours...');
+          this.logger.log(
+            'Reconnexion IMAP nécessaire, reconnexion en cours...',
+          );
           await this.connectToImap();
         }
       } catch (error) {
         this.logger.log('Reconnexion IMAP forcée...');
         await this.connectToImap();
       }
-      
+
       let totalProcessed = 0;
 
       for (const category of Object.keys(sortedEmails)) {
@@ -588,74 +612,86 @@ export class SortEmailService implements OnModuleInit {
         });
 
         // Déplacer tous les emails de cette catégorie
-        const emailIds = sortedEmails[category].map((email) =>
-          Number((email as any).uid || email.id),
-        );
-
-        this.logger.log(
-          `Déplacement de ${emailIds.length} emails vers "${category}"...`,
-        );
-
-        if (emailIds.length > 0) {
-          // 1. Marquer comme lus
-          await new Promise<void>((resolve, reject) => {
-            this.imap.setFlags(emailIds, ['\\Seen'], (err) => {
-              if (err) {
-                this.logger.error(
-                  `Erreur lors du marquage des emails: ${err.message}`,
-                );
-                return reject(err);
-              }
-              resolve();
-            });
-          });
-
-          // 2. Copier vers la catégorie
-          await new Promise<void>((resolve, reject) => {
-            this.imap.copy(emailIds, category, (err) => {
-              if (err) {
-                this.logger.error(
-                  `Erreur lors de la copie des emails: ${err.message}`,
-                );
-                return reject(err);
-              }
-              resolve();
-            });
-          });
-
-          // 3. Marquer pour suppression
-          await new Promise<void>((resolve, reject) => {
-            this.imap.addFlags(emailIds, ['\\Deleted'], (err) => {
-              if (err) {
-                this.logger.error(
-                  `Erreur lors du marquage pour suppression: ${err.message}`,
-                );
-                return reject(err);
-              }
-              resolve();
-            });
-          });
-
-          // 4. Expurger (supprimer définitivement)
-          await new Promise<void>((resolve, reject) => {
-            this.imap.expunge((err) => {
-              if (err) {
-                this.logger.error(
-                  `Erreur lors de la suppression définitive: ${err.message}`,
-                );
-                return reject(err);
-              }
-              this.logger.log(
-                `${emailIds.length} emails déplacés vers "${category}"`,
-              );
-              resolve();
-            });
-          });
-
-          totalProcessed += emailIds.length;
-          this.logger.log(`Progression: ${totalProcessed} emails traités`);
+        // Récupérer les UIDs sous forme de chaînes pour garantir la précision
+        const emailUids = sortedEmails[category]
+          .filter(email => (email as any).uid) // S'assurer que l'email a un UID
+          .map(email => (email as any).uid);
+        
+        if (emailUids.length === 0) {
+          this.logger.warn(`Aucun UID valide trouvé pour la catégorie ${category}`);
+          continue;
         }
 
+        this.logger.log(
+          `Déplacement de ${emailUids.length} emails vers "${category}"...`,
+        );
+
+        // Afficher les UIDs pour le débogage
+        this.logger.debug(`UIDs à déplacer: ${emailUids.join(', ')}`);
+
+        // 1. Marquer comme lus
+        await new Promise<void>((resolve, reject) => {
+          this.imap.setFlags(emailUids, ['\\Seen'], (err) => {
+            if (err) {
+              this.logger.error(
+                `Erreur lors du marquage des emails: ${err.message}`,
+              );
+              return reject(err);
+            }
+            this.logger.debug('Emails marqués comme lus avec succès');
+            resolve();
+          });
+        });
+
+        // 2. Copier vers la catégorie - utiliser un nom de dossier sans encodage spécial
+        const folderName = this.normalizeMailboxName(category);
+        await new Promise<void>((resolve, reject) => {
+          this.logger.debug(`Tentative de copie vers le dossier: "${folderName}"`);
+          this.imap.copy(emailUids, folderName, (err) => {
+            if (err) {
+              this.logger.error(
+                `Erreur lors de la copie des emails: ${err.message}`,
+              );
+              return reject(err);
+            }
+            this.logger.debug(`Emails copiés vers "${folderName}" avec succès`);
+            resolve();
+          });
+        });
+
+        // 3. Marquer pour suppression
+        await new Promise<void>((resolve, reject) => {
+          this.imap.addFlags(emailUids, ['\\Deleted'], (err) => {
+            if (err) {
+              this.logger.error(
+                `Erreur lors du marquage pour suppression: ${err.message}`,
+              );
+              return reject(err);
+            }
+            this.logger.debug('Emails marqués pour suppression avec succès');
+            resolve();
+          });
+        });
+
+        // 4. Expurger (supprimer définitivement)
+        await new Promise<void>((resolve, reject) => {
+          this.imap.expunge((err) => {
+            if (err) {
+              this.logger.error(
+                `Erreur lors de la suppression définitive: ${err.message}`,
+              );
+              return reject(err);
+            }
+            this.logger.log(
+              `${emailUids.length} emails déplacés vers "${category}"`,
+            );
+            resolve();
+          });
+        });
+
+        totalProcessed += emailUids.length;
+        this.logger.log(`Progression: ${totalProcessed} emails traités`);
+        
         this.logger.log(
           `Tous les emails de la catégorie "${category}" ont été traités`,
         );
@@ -664,7 +700,7 @@ export class SortEmailService implements OnModuleInit {
       this.logger.log(
         `Traitement terminé. ${totalProcessed} emails ont été triés et déplacés`,
       );
-      
+
       // Fermer la connexion IMAP une fois toutes les opérations terminées
       this.closeConnection();
     } catch (error) {
@@ -689,24 +725,44 @@ export class SortEmailService implements OnModuleInit {
           return reject(err);
         }
 
-        const categoryExists = Object.keys(boxes).some(
-          (key) => key.toLowerCase() === categoryName.toLowerCase(),
-        );
+        // Afficher tous les dossiers disponibles pour le débogage
+        this.logger.debug(`Dossiers disponibles: ${Object.keys(boxes).join(', ')}`);
+        
+        // Normaliser le nom de catégorie pour la recherche
+        const normalizedName = this.normalizeMailboxName(categoryName);
+        this.logger.debug(`Recherche du dossier avec le nom normalisé: "${normalizedName}"`);
 
+        // Vérifier si le dossier existe déjà (vérification insensible à la casse)
+        // et prendre en compte les variations d'encodage possibles
+        let categoryExists = false;
+        let exactBoxName = '';
+
+        // Pour chaque boîte, vérifier si le nom correspond (insensible à la casse)
+        Object.keys(boxes).forEach(boxName => {
+          if (boxName.toLowerCase() === categoryName.toLowerCase() || 
+              boxName === normalizedName) {
+            categoryExists = true;
+            exactBoxName = boxName; // Conserver le nom exact tel qu'il apparaît dans la liste
+            this.logger.debug(`Correspondance trouvée pour le dossier: ${boxName}`);
+          }
+        });
+
+        // Si le dossier n'existe pas, le créer
         if (!categoryExists) {
           this.logger.log(`Création du dossier "${categoryName}"...`);
-          this.imap.addBox(categoryName, (addBoxErr) => {
+          // Utiliser le nom normalisé pour la création
+          this.imap.addBox(normalizedName, (addBoxErr) => {
             if (addBoxErr) {
               this.logger.error(
                 `Erreur lors de la création du dossier: ${addBoxErr.message}`,
               );
               return reject(addBoxErr);
             }
-            this.logger.log(`Dossier "${categoryName}" créé avec succès`);
+            this.logger.log(`Dossier "${normalizedName}" créé avec succès`);
             resolve();
           });
         } else {
-          this.logger.debug(`Le dossier "${categoryName}" existe déjà`);
+          this.logger.debug(`Le dossier "${categoryName}" existe déjà (trouvé sous le nom "${exactBoxName}")`);
           resolve();
         }
       });
@@ -855,7 +911,10 @@ export class SortEmailService implements OnModuleInit {
   /**
    * Cherche et classe les emails dans une catégorie spécifique
    */
-  async sortEmailsByCategory(categoryName: string): Promise<number> {
+  async sortEmailsByCategory(
+    categoryName: string,
+    limit?: number,
+  ): Promise<number> {
     try {
       // Vérifier si la catégorie existe
       if (!this.categories.includes(categoryName)) {
@@ -870,7 +929,7 @@ export class SortEmailService implements OnModuleInit {
       );
 
       // Récupérer tous les emails non lus
-      const emails = await this.getUnsortedEmails();
+      const emails = await this.getUnsortedEmails(limit);
 
       if (emails.length === 0) {
         this.logger.log('Aucun email non lu trouvé');
@@ -951,10 +1010,12 @@ export class SortEmailService implements OnModuleInit {
   /**
    * Tri tous les emails (y compris ceux déjà lus) en utilisant l'API OpenAI
    */
-  async sortAllEmails(): Promise<{ [category: string]: Email[] }> {
+  async sortAllEmails(
+    limit?: number,
+  ): Promise<{ [category: string]: Email[] }> {
     try {
       this.logger.log('Démarrage du processus de tri de tous les emails...');
-      const emails = await this.getAllEmails();
+      const emails = await this.getAllEmails(limit);
       this.logger.log(`Nombre total d'emails à trier: ${emails.length}`);
 
       const sortedEmails: { [category: string]: Email[] } = {};
@@ -997,299 +1058,367 @@ export class SortEmailService implements OnModuleInit {
   /**
    * Récupère les emails non lus de tous les dossiers
    */
-  async getUnsortedEmailsFromAllFolders(): Promise<Email[]> {
+  async getUnsortedEmailsFromAllFolders(limit?: number): Promise<Email[]> {
     try {
       await this.connectToImap();
       const allEmails: Email[] = [];
-      
+
       // Récupérer tous les dossiers disponibles
       const folders = await new Promise<string[]>((resolve, reject) => {
         this.imap.getBoxes((err, boxes) => {
           if (err) {
-            this.logger.error(`Erreur lors de la récupération des dossiers: ${err.message}`);
+            this.logger.error(
+              `Erreur lors de la récupération des dossiers: ${err.message}`,
+            );
             return reject(err);
           }
-          
+
           // Extraire les noms de dossiers et filtrer les dossiers spéciaux si nécessaire
           const folderNames = Object.keys(boxes);
           resolve(folderNames);
         });
       });
-      
+
       this.logger.log(`Dossiers trouvés: ${folders.join(', ')}`);
-      
+
       // Parcourir chaque dossier
       for (const folder of folders) {
         try {
-          this.logger.log(`Recherche des emails non lus dans le dossier: ${folder}`);
-          
+          this.logger.log(
+            `Recherche des emails non lus dans le dossier: ${folder}`,
+          );
+
           await new Promise<void>((resolve, reject) => {
             this.imap.openBox(folder, false, (err) => {
               if (err) {
-                this.logger.warn(`Impossible d'ouvrir le dossier ${folder}: ${err.message}`);
-                return resolve(); // Continuer avec le dossier suivant
+                this.logger.warn(
+                  `Impossible d'ouvrir le dossier ${folder}: ${err.message}`,
+                );
+                return resolve();
               }
               resolve();
             });
           });
-          
+
           // Rechercher les emails non lus dans ce dossier
           const folderEmails = await new Promise<Email[]>((resolve, reject) => {
             this.imap.search(['UNSEEN'], (searchErr, results) => {
               if (searchErr) {
                 this.logger.error(
-                  `Erreur lors de la recherche des emails dans ${folder}: ${searchErr.message}`
+                  `Erreur lors de la recherche des emails dans ${folder}: ${searchErr.message}`,
                 );
-                return resolve([]); // Continuer avec le dossier suivant
+                return resolve([]);
               }
-              
+
               if (!results || results.length === 0) {
                 this.logger.log(`Aucun email non lu trouvé dans ${folder}`);
                 return resolve([]);
               }
-              
-              this.logger.log(`${results.length} emails non lus trouvés dans ${folder}`);
-              
+
+              this.logger.log(
+                `${results.length} emails non lus trouvés dans ${folder}`,
+              );
+
               const emailPromises: Promise<Email>[] = [];
               const fetch = this.imap.fetch(results, {
                 bodies: [''],
                 struct: true,
                 markSeen: false,
               });
-              
+
               fetch.on('message', (msg, seqno) => {
-                const emailPromise = new Promise<Email>((resolveEmail, rejectEmail) => {
-                  const email: Partial<Email> = { id: String(seqno), folderPath: folder };
-                  
-                  msg.on('body', (stream) => {
-                    let buffer = '';
-                    stream.on('data', (chunk) => {
-                      buffer += chunk.toString('utf8');
+                const emailPromise = new Promise<Email>(
+                  (resolveEmail, rejectEmail) => {
+                    const email: Partial<Email> = {
+                      id: String(seqno),
+                      folderPath: folder,
+                    };
+
+                    msg.on('body', (stream) => {
+                      let buffer = '';
+                      stream.on('data', (chunk) => {
+                        buffer += chunk.toString('utf8');
+                      });
+
+                      stream.once('end', async () => {
+                        try {
+                          const parsed = await simpleParser(buffer);
+
+                          email.from = parsed.from?.text || '';
+                          email.to = parsed.to?.text || '';
+                          email.subject = parsed.subject || '';
+                          email.date = parsed.date || new Date();
+                          email.body = parsed.text || '';
+
+                          resolveEmail(email as Email);
+                        } catch (e) {
+                          this.logger.error(
+                            `Erreur lors du parsing de l'email: ${e.message}`,
+                          );
+                          rejectEmail(e);
+                        }
+                      });
                     });
-                    
-                    stream.once('end', async () => {
-                      try {
-                        const parsed = await simpleParser(buffer);
-                        
-                        email.from = parsed.from?.text || '';
-                        email.to = parsed.to?.text || '';
-                        email.subject = parsed.subject || '';
-                        email.date = parsed.date || new Date();
-                        email.body = parsed.text || '';
-                        
-                        resolveEmail(email as Email);
-                      } catch (e) {
-                        this.logger.error(`Erreur lors du parsing de l'email: ${e.message}`);
-                        rejectEmail(e);
-                      }
+
+                    msg.once('attributes', (attrs) => {
+                      (email as any).uid = attrs.uid;
                     });
-                  });
-                  
-                  msg.once('attributes', (attrs) => {
-                    (email as any).uid = attrs.uid;
-                  });
-                });
-                
+                  },
+                );
+
                 emailPromises.push(emailPromise);
               });
-              
+
               fetch.once('error', (fetchErr) => {
-                this.logger.error(`Erreur lors du fetch des emails: ${fetchErr.message}`);
+                this.logger.error(
+                  `Erreur lors du fetch des emails: ${fetchErr.message}`,
+                );
                 resolve([]);
               });
-              
+
               fetch.once('end', () => {
                 Promise.all(emailPromises)
                   .then((resolvedEmails) => {
                     resolve(resolvedEmails);
                   })
                   .catch((err) => {
-                    this.logger.error(`Erreur lors du traitement des emails: ${err.message}`);
+                    this.logger.error(
+                      `Erreur lors du traitement des emails: ${err.message}`,
+                    );
                     resolve([]);
                   });
               });
             });
           });
-          
+
           // Ajouter les emails trouvés à la liste complète
           allEmails.push(...folderEmails);
-          
         } catch (folderError) {
-          this.logger.error(`Erreur lors du traitement du dossier ${folder}: ${folderError.message}`);
+          this.logger.error(
+            `Erreur lors du traitement du dossier ${folder}: ${folderError.message}`,
+          );
           // Continuer avec le dossier suivant
         }
       }
-      
-      this.logger.log(`Total des emails non lus trouvés dans tous les dossiers: ${allEmails.length}`);
+
+      this.logger.log(
+        `Total des emails non lus trouvés dans tous les dossiers: ${allEmails.length}`,
+      );
+      // Appliquer la limite ici, sur le total des emails collectés
+      if (limit && allEmails.length > limit) {
+        this.logger.log(
+          `Application de la limite: ${limit} emails sur ${allEmails.length} seront retournés.`,
+        );
+        return allEmails.slice(0, limit);
+      }
       return allEmails;
-      
     } catch (error) {
-      this.logger.error(`Erreur dans getUnsortedEmailsFromAllFolders: ${error.message}`);
+      this.logger.error(
+        `Erreur dans getUnsortedEmailsFromAllFolders: ${error.message}`,
+      );
       throw error;
     }
   }
-  
+
   /**
    * Récupère tous les emails (lus et non lus) de tous les dossiers
    */
-  async getAllEmailsFromAllFolders(): Promise<Email[]> {
+  async getAllEmailsFromAllFolders(limit?: number): Promise<Email[]> {
     try {
       await this.connectToImap();
       const allEmails: Email[] = [];
-      
+
       // Récupérer tous les dossiers disponibles
       const folders = await new Promise<string[]>((resolve, reject) => {
         this.imap.getBoxes((err, boxes) => {
           if (err) {
-            this.logger.error(`Erreur lors de la récupération des dossiers: ${err.message}`);
+            this.logger.error(
+              `Erreur lors de la récupération des dossiers: ${err.message}`,
+            );
             return reject(err);
           }
-          
+
           // Extraire les noms de dossiers et filtrer les dossiers spéciaux si nécessaire
           const folderNames = Object.keys(boxes);
           resolve(folderNames);
         });
       });
-      
+
       this.logger.log(`Dossiers trouvés: ${folders.join(', ')}`);
-      
+
       // Parcourir chaque dossier
       for (const folder of folders) {
         try {
-          this.logger.log(`Recherche de tous les emails dans le dossier: ${folder}`);
-          
+          this.logger.log(
+            `Recherche de tous les emails dans le dossier: ${folder}`,
+          );
+
           await new Promise<void>((resolve, reject) => {
             this.imap.openBox(folder, false, (err) => {
               if (err) {
-                this.logger.warn(`Impossible d'ouvrir le dossier ${folder}: ${err.message}`);
+                this.logger.warn(
+                  `Impossible d'ouvrir le dossier ${folder}: ${err.message}`,
+                );
                 return resolve(); // Continuer avec le dossier suivant
               }
               resolve();
             });
           });
-          
+
           // Rechercher tous les emails dans ce dossier
           const folderEmails = await new Promise<Email[]>((resolve, reject) => {
             this.imap.search(['ALL'], (searchErr, results) => {
               if (searchErr) {
                 this.logger.error(
-                  `Erreur lors de la recherche des emails dans ${folder}: ${searchErr.message}`
+                  `Erreur lors de la recherche des emails dans ${folder}: ${searchErr.message}`,
                 );
                 return resolve([]); // Continuer avec le dossier suivant
               }
-              
+
               if (!results || results.length === 0) {
                 this.logger.log(`Aucun email trouvé dans ${folder}`);
                 return resolve([]);
               }
-              
-              this.logger.log(`${results.length} emails trouvés dans ${folder}`);
-              
+
+              this.logger.log(
+                `${results.length} emails trouvés dans ${folder}`,
+              );
+
               const emailPromises: Promise<Email>[] = [];
               const fetch = this.imap.fetch(results, {
                 bodies: [''],
                 struct: true,
                 markSeen: false,
               });
-              
+
               fetch.on('message', (msg, seqno) => {
-                const emailPromise = new Promise<Email>((resolveEmail, rejectEmail) => {
-                  const email: Partial<Email> = { id: String(seqno), folderPath: folder };
-                  
-                  msg.on('body', (stream) => {
-                    let buffer = '';
-                    stream.on('data', (chunk) => {
-                      buffer += chunk.toString('utf8');
+                const emailPromise = new Promise<Email>(
+                  (resolveEmail, rejectEmail) => {
+                    const email: Partial<Email> = {
+                      id: String(seqno),
+                      folderPath: folder,
+                    };
+
+                    msg.on('body', (stream) => {
+                      let buffer = '';
+                      stream.on('data', (chunk) => {
+                        buffer += chunk.toString('utf8');
+                      });
+
+                      stream.once('end', async () => {
+                        try {
+                          const parsed = await simpleParser(buffer);
+
+                          email.from = parsed.from?.text || '';
+                          email.to = parsed.to?.text || '';
+                          email.subject = parsed.subject || '';
+                          email.date = parsed.date || new Date();
+                          email.body = parsed.text || '';
+
+                          resolveEmail(email as Email);
+                        } catch (e) {
+                          this.logger.error(
+                            `Erreur lors du parsing de l'email: ${e.message}`,
+                          );
+                          rejectEmail(e);
+                        }
+                      });
                     });
-                    
-                    stream.once('end', async () => {
-                      try {
-                        const parsed = await simpleParser(buffer);
-                        
-                        email.from = parsed.from?.text || '';
-                        email.to = parsed.to?.text || '';
-                        email.subject = parsed.subject || '';
-                        email.date = parsed.date || new Date();
-                        email.body = parsed.text || '';
-                        
-                        resolveEmail(email as Email);
-                      } catch (e) {
-                        this.logger.error(`Erreur lors du parsing de l'email: ${e.message}`);
-                        rejectEmail(e);
-                      }
+
+                    msg.once('attributes', (attrs) => {
+                      (email as any).uid = attrs.uid;
                     });
-                  });
-                  
-                  msg.once('attributes', (attrs) => {
-                    (email as any).uid = attrs.uid;
-                  });
-                });
-                
+                  },
+                );
+
                 emailPromises.push(emailPromise);
               });
-              
+
               fetch.once('error', (fetchErr) => {
-                this.logger.error(`Erreur lors du fetch des emails: ${fetchErr.message}`);
+                this.logger.error(
+                  `Erreur lors du fetch des emails: ${fetchErr.message}`,
+                );
                 resolve([]);
               });
-              
+
               fetch.once('end', () => {
                 Promise.all(emailPromises)
                   .then((resolvedEmails) => {
                     resolve(resolvedEmails);
                   })
                   .catch((err) => {
-                    this.logger.error(`Erreur lors du traitement des emails: ${err.message}`);
+                    this.logger.error(
+                      `Erreur lors du traitement des emails: ${err.message}`,
+                    );
                     resolve([]);
                   });
               });
             });
           });
-          
+
           // Ajouter les emails trouvés à la liste complète
           allEmails.push(...folderEmails);
-          
         } catch (folderError) {
-          this.logger.error(`Erreur lors du traitement du dossier ${folder}: ${folderError.message}`);
+          this.logger.error(
+            `Erreur lors du traitement du dossier ${folder}: ${folderError.message}`,
+          );
           // Continuer avec le dossier suivant
         }
       }
-      
-      this.logger.log(`Total des emails trouvés dans tous les dossiers: ${allEmails.length}`);
+
+      this.logger.log(
+        `Total des emails trouvés dans tous les dossiers: ${allEmails.length}`,
+      );
+      // Appliquer la limite ici, sur le total des emails collectés
+      if (limit && allEmails.length > limit) {
+        this.logger.log(
+          `Application de la limite: ${limit} emails sur ${allEmails.length} seront retournés.`,
+        );
+        return allEmails.slice(0, limit);
+      }
       return allEmails;
-      
     } catch (error) {
-      this.logger.error(`Erreur dans getAllEmailsFromAllFolders: ${error.message}`);
+      this.logger.error(
+        `Erreur dans getAllEmailsFromAllFolders: ${error.message}`,
+      );
       throw error;
     }
   }
-  
+
   /**
    * Tri les emails non lus de tous les dossiers
    */
-  async sortEmailsFromAllFolders(): Promise<{ [category: string]: Email[] }> {
+  async sortEmailsFromAllFolders(
+    limit?: number,
+  ): Promise<{ [category: string]: Email[] }> {
     try {
-      this.logger.log('Démarrage du tri des emails non lus de tous les dossiers...');
-      const emails = await this.getUnsortedEmailsFromAllFolders();
-      this.logger.log(`Nombre total d'emails non lus à trier: ${emails.length}`);
-      
+      this.logger.log(
+        'Démarrage du tri des emails non lus de tous les dossiers...',
+      );
+      const emails = await this.getUnsortedEmailsFromAllFolders(limit);
+      this.logger.log(
+        `Nombre total d'emails non lus à trier: ${emails.length}`,
+      );
+
       // Continuer avec le même processus de tri
       const sortedEmails: { [category: string]: Email[] } = {};
-      
+
       // Initialiser les catégories
       this.categories.forEach((category) => {
         sortedEmails[category] = [];
       });
-      
+
       // Trier chaque email
       this.logger.log('Classification des emails non lus par catégorie...');
       for (const email of emails) {
-        this.logger.log(`Traitement de l'email: "${email.subject?.substring(0, 30)}..."`);
+        this.logger.log(
+          `Traitement de l'email: "${email.subject?.substring(0, 30)}..."`,
+        );
         const category = await this.categorizeEmail(email);
         email.category = category;
         sortedEmails[category].push(email);
       }
-      
+
       // Résumé des résultats
       this.logger.log('Tri des emails non lus terminé. Résumé par catégorie:');
       for (const category of Object.keys(sortedEmails)) {
@@ -1298,41 +1427,49 @@ export class SortEmailService implements OnModuleInit {
           this.logger.log(`- ${category}: ${count} email(s)`);
         }
       }
-      
+
       return sortedEmails;
     } catch (error) {
       this.closeConnection();
-      this.logger.error(`Erreur pendant le tri des emails non lus: ${error.message}`);
+      this.logger.error(
+        `Erreur pendant le tri des emails non lus: ${error.message}`,
+      );
       throw error;
     }
   }
-  
+
   /**
    * Tri tous les emails (lus et non lus) de tous les dossiers
    */
-  async sortAllEmailsFromAllFolders(): Promise<{ [category: string]: Email[] }> {
+  async sortAllEmailsFromAllFolders(
+    limit?: number,
+  ): Promise<{ [category: string]: Email[] }> {
     try {
-      this.logger.log('Démarrage du tri de tous les emails de tous les dossiers...');
-      const emails = await this.getAllEmailsFromAllFolders();
+      this.logger.log(
+        'Démarrage du tri de tous les emails de tous les dossiers...',
+      );
+      const emails = await this.getAllEmailsFromAllFolders(limit);
       this.logger.log(`Nombre total d'emails à trier: ${emails.length}`);
-      
+
       // Continuer avec le même processus de tri
       const sortedEmails: { [category: string]: Email[] } = {};
-      
+
       // Initialiser les catégories
       this.categories.forEach((category) => {
         sortedEmails[category] = [];
       });
-      
+
       // Trier chaque email
       this.logger.log('Classification de tous les emails par catégorie...');
       for (const email of emails) {
-        this.logger.log(`Traitement de l'email: "${email.subject?.substring(0, 30)}..."`);
+        this.logger.log(
+          `Traitement de l'email: "${email.subject?.substring(0, 30)}..."`,
+        );
         const category = await this.categorizeEmail(email);
         email.category = category;
         sortedEmails[category].push(email);
       }
-      
+
       // Résumé des résultats
       this.logger.log('Tri de tous les emails terminé. Résumé par catégorie:');
       for (const category of Object.keys(sortedEmails)) {
@@ -1341,12 +1478,34 @@ export class SortEmailService implements OnModuleInit {
           this.logger.log(`- ${category}: ${count} email(s)`);
         }
       }
-      
+
       return sortedEmails;
     } catch (error) {
       this.closeConnection();
-      this.logger.error(`Erreur pendant le tri de tous les emails: ${error.message}`);
+      this.logger.error(
+        `Erreur pendant le tri de tous les emails: ${error.message}`,
+      );
       throw error;
     }
+  }
+
+  /**
+   * Normalise les noms de dossiers pour gérer les problèmes d'encodage
+   * Particulièrement utile pour les dossiers avec caractères accentués
+   */
+  private normalizeMailboxName(folderName: string): string {
+    // Table de correspondance pour les noms de dossiers spéciaux
+    const specialFolders: Record<string, string> = {
+      'Reçus': 'Re&AOc-us', // Encodage spécial observé dans les logs
+      'Envoyés': 'Envoy&AOk-s',
+    };
+
+    // Si le nom est dans notre table de correspondance, utiliser la version encodée
+    if (specialFolders[folderName]) {
+      this.logger.debug(`Nom de dossier normalisé: "${folderName}" -> "${specialFolders[folderName]}"`);
+      return specialFolders[folderName];
+    }
+
+    return folderName;
   }
 }
