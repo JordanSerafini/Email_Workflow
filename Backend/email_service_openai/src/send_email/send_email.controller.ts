@@ -44,12 +44,13 @@ export class SendEmailController {
       }
 
       // Extraire la réponse si c'est un objet avec des informations de tokens
-      const responseData = typeof result.draftResponse === 'string'
-        ? { draftResponse: result.draftResponse }
-        : { 
-            draftResponse: result.draftResponse.response,
-            tokensUsed: result.draftResponse.tokensUsed
-          };
+      const responseData =
+        typeof result.draftResponse === 'string'
+          ? { draftResponse: result.draftResponse }
+          : {
+              draftResponse: result.draftResponse.response,
+              tokensUsed: result.draftResponse.tokensUsed,
+            };
 
       return {
         status: 'success',
@@ -113,12 +114,13 @@ export class SendEmailController {
       );
 
       // Extraire la réponse si c'est un objet avec informations de tokens
-      const responseData = typeof rewrittenResponse === 'string'
-        ? { rewrittenResponse }
-        : { 
-          rewrittenResponse: rewrittenResponse.response,
-          tokensUsed: rewrittenResponse.tokensUsed,
-        };
+      const responseData =
+        typeof rewrittenResponse === 'string'
+          ? { rewrittenResponse }
+          : {
+              rewrittenResponse: rewrittenResponse.response,
+              tokensUsed: rewrittenResponse.tokensUsed,
+            };
 
       return {
         status: 'success',
@@ -230,9 +232,10 @@ export class SendEmailController {
       }
 
       // Extraire le texte de la réponse finale si c'est un objet
-      const responseText = typeof finalResponse === 'string'
-        ? finalResponse
-        : finalResponse.response;
+      const responseText =
+        typeof finalResponse === 'string'
+          ? finalResponse
+          : finalResponse.response;
 
       // Envoyer la réponse
       const sendResult = await this.sendEmailService.sendEmailResponse(

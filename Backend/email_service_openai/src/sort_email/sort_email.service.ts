@@ -517,7 +517,9 @@ export class SortEmailService implements OnModuleInit {
       this.logger.log(`Nombre total d'emails à trier: ${emails.length}`);
 
       // Afficher les UIDs des emails récupérés pour le débogage
-      this.logger.debug(`UIDs des emails récupérés: ${emails.map(e => (e as any).uid).join(', ')}`);
+      this.logger.debug(
+        `UIDs des emails récupérés: ${emails.map((e) => (e as any).uid).join(', ')}`,
+      );
 
       const sortedEmails: { [category: string]: Email[] } = {};
 
@@ -544,12 +546,14 @@ export class SortEmailService implements OnModuleInit {
         const count = sortedEmails[category].length;
         if (count > 0) {
           this.logger.log(`- ${category}: ${count} email(s)`);
-          
+
           // Afficher les UIDs par catégorie pour le débogage
           this.logger.debug(
-            `UIDs des emails dans la catégorie "${category}": ${sortedEmails[category]
-              .map(e => (e as any).uid)
-              .join(', ')}`
+            `UIDs des emails dans la catégorie "${category}": ${sortedEmails[
+              category
+            ]
+              .map((e) => (e as any).uid)
+              .join(', ')}`,
           );
         }
       }
@@ -614,11 +618,13 @@ export class SortEmailService implements OnModuleInit {
         // Déplacer tous les emails de cette catégorie
         // Récupérer les UIDs sous forme de chaînes pour garantir la précision
         const emailUids = sortedEmails[category]
-          .filter(email => (email as any).uid) // S'assurer que l'email a un UID
-          .map(email => (email as any).uid);
-        
+          .filter((email) => (email as any).uid) // S'assurer que l'email a un UID
+          .map((email) => (email as any).uid);
+
         if (emailUids.length === 0) {
-          this.logger.warn(`Aucun UID valide trouvé pour la catégorie ${category}`);
+          this.logger.warn(
+            `Aucun UID valide trouvé pour la catégorie ${category}`,
+          );
           continue;
         }
 
@@ -646,7 +652,9 @@ export class SortEmailService implements OnModuleInit {
         // 2. Copier vers la catégorie - utiliser un nom de dossier sans encodage spécial
         const folderName = this.normalizeMailboxName(category);
         await new Promise<void>((resolve, reject) => {
-          this.logger.debug(`Tentative de copie vers le dossier: "${folderName}"`);
+          this.logger.debug(
+            `Tentative de copie vers le dossier: "${folderName}"`,
+          );
           this.imap.copy(emailUids, folderName, (err) => {
             if (err) {
               this.logger.error(
@@ -691,7 +699,7 @@ export class SortEmailService implements OnModuleInit {
 
         totalProcessed += emailUids.length;
         this.logger.log(`Progression: ${totalProcessed} emails traités`);
-        
+
         this.logger.log(
           `Tous les emails de la catégorie "${category}" ont été traités`,
         );
@@ -726,11 +734,15 @@ export class SortEmailService implements OnModuleInit {
         }
 
         // Afficher tous les dossiers disponibles pour le débogage
-        this.logger.debug(`Dossiers disponibles: ${Object.keys(boxes).join(', ')}`);
-        
+        this.logger.debug(
+          `Dossiers disponibles: ${Object.keys(boxes).join(', ')}`,
+        );
+
         // Normaliser le nom de catégorie pour la recherche
         const normalizedName = this.normalizeMailboxName(categoryName);
-        this.logger.debug(`Recherche du dossier avec le nom normalisé: "${normalizedName}"`);
+        this.logger.debug(
+          `Recherche du dossier avec le nom normalisé: "${normalizedName}"`,
+        );
 
         // Vérifier si le dossier existe déjà (vérification insensible à la casse)
         // et prendre en compte les variations d'encodage possibles
@@ -738,12 +750,16 @@ export class SortEmailService implements OnModuleInit {
         let exactBoxName = '';
 
         // Pour chaque boîte, vérifier si le nom correspond (insensible à la casse)
-        Object.keys(boxes).forEach(boxName => {
-          if (boxName.toLowerCase() === categoryName.toLowerCase() || 
-              boxName === normalizedName) {
+        Object.keys(boxes).forEach((boxName) => {
+          if (
+            boxName.toLowerCase() === categoryName.toLowerCase() ||
+            boxName === normalizedName
+          ) {
             categoryExists = true;
             exactBoxName = boxName; // Conserver le nom exact tel qu'il apparaît dans la liste
-            this.logger.debug(`Correspondance trouvée pour le dossier: ${boxName}`);
+            this.logger.debug(
+              `Correspondance trouvée pour le dossier: ${boxName}`,
+            );
           }
         });
 
@@ -762,7 +778,9 @@ export class SortEmailService implements OnModuleInit {
             resolve();
           });
         } else {
-          this.logger.debug(`Le dossier "${categoryName}" existe déjà (trouvé sous le nom "${exactBoxName}")`);
+          this.logger.debug(
+            `Le dossier "${categoryName}" existe déjà (trouvé sous le nom "${exactBoxName}")`,
+          );
           resolve();
         }
       });
@@ -1496,13 +1514,15 @@ export class SortEmailService implements OnModuleInit {
   private normalizeMailboxName(folderName: string): string {
     // Table de correspondance pour les noms de dossiers spéciaux
     const specialFolders: Record<string, string> = {
-      'Reçus': 'Re&AOc-us', // Encodage spécial observé dans les logs
-      'Envoyés': 'Envoy&AOk-s',
+      Reçus: 'Re&AOc-us', // Encodage spécial observé dans les logs
+      Envoyés: 'Envoy&AOk-s',
     };
 
     // Si le nom est dans notre table de correspondance, utiliser la version encodée
     if (specialFolders[folderName]) {
-      this.logger.debug(`Nom de dossier normalisé: "${folderName}" -> "${specialFolders[folderName]}"`);
+      this.logger.debug(
+        `Nom de dossier normalisé: "${folderName}" -> "${specialFolders[folderName]}"`,
+      );
       return specialFolders[folderName];
     }
 

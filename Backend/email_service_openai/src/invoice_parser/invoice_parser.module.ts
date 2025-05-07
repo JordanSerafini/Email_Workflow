@@ -7,4 +7,4 @@ import { InvoiceParserService } from './invoice_parser.service';
   providers: [InvoiceParserService],
   exports: [InvoiceParserService],
 })
-export class InvoiceParserModule {} 
+export class InvoiceParserModule {}

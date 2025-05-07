@@ -19,4 +19,4 @@ export interface AnalyzedInvoice {
   date: Date;
   invoiceData: InvoiceData;
   error?: string;
-} 
+}

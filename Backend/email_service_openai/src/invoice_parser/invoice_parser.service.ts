@@ -216,7 +216,9 @@ export class InvoiceParserService {
         total: response.usage?.total_tokens || 0,
       };
 
-      console.log(`[InvoiceParser] Tokens utilisés: entrée=${tokensUsed.input}, sortie=${tokensUsed.output}, total=${tokensUsed.total}`);
+      console.log(
+        `[InvoiceParser] Tokens utilisés: entrée=${tokensUsed.input}, sortie=${tokensUsed.output}, total=${tokensUsed.total}`,
+      );
 
       // Récupérer le contenu JSON de la réponse
       const jsonContent = response.choices[0].message.content || '';
@@ -233,25 +235,25 @@ export class InvoiceParserService {
           console.log(`[InvoiceParser] Tentative de parsing JSON...`);
           const parsedJson = JSON.parse(cleanedJsonContent);
           console.log(`[InvoiceParser] JSON parsé avec succès`);
-          
+
           // Ajouter les informations sur les tokens utilisés
           return {
             ...parsedJson,
-            tokensUsed
+            tokensUsed,
           };
         } else {
           console.log(`[InvoiceParser] Réponse vide de l'API OpenAI`);
-          return { 
+          return {
             error: "Réponse vide de l'API OpenAI",
-            tokensUsed
+            tokensUsed,
           };
         }
       } catch (parseError) {
         console.error(`Erreur lors du parsing JSON: ${parseError.message}`);
         // Renvoyer le texte brut si le parsing échoue
-        return { 
+        return {
           rawResponse: cleanedJsonContent,
-          tokensUsed
+          tokensUsed,
         };
       }
     } catch (error) {
@@ -262,7 +264,7 @@ export class InvoiceParserService {
           input: 0,
           output: 0,
           total: 0,
-        }
+        },
       };
     }
   }
@@ -447,7 +449,7 @@ export class InvoiceParserService {
           input: 0,
           output: 0,
           total: 0,
-        }
+        },
       };
     } catch (error) {
       console.error(
@@ -461,7 +463,7 @@ export class InvoiceParserService {
           input: 0,
           output: 0,
           total: 0,
-        }
+        },
       };
     }
   }
@@ -483,7 +485,7 @@ export class InvoiceParserService {
               input: 0,
               output: 0,
               total: 0,
-            }
+            },
           },
         ];
       }
@@ -500,7 +502,7 @@ export class InvoiceParserService {
         total: 0,
       };
 
-      results.forEach(result => {
+      results.forEach((result) => {
         if (result.tokensUsed) {
           totalTokensUsed.input += result.tokensUsed.input;
           totalTokensUsed.output += result.tokensUsed.output;
@@ -508,20 +510,19 @@ export class InvoiceParserService {
         }
       });
 
-      console.log(`[InvoiceParser] Total des tokens utilisés: entrée=${totalTokensUsed.input}, sortie=${totalTokensUsed.output}, total=${totalTokensUsed.total}`);
+      console.log(
+        `[InvoiceParser] Total des tokens utilisés: entrée=${totalTokensUsed.input}, sortie=${totalTokensUsed.output}, total=${totalTokensUsed.total}`,
+      );
 
       // Ajouter les statistiques d'utilisation des tokens au résumé global
       const summaryWithTokens = {
         totalFiles: pdfFiles.length,
-        successfulAnalyses: results.filter(r => r.success).length,
-        failedAnalyses: results.filter(r => !r.success).length,
+        successfulAnalyses: results.filter((r) => r.success).length,
+        failedAnalyses: results.filter((r) => !r.success).length,
         tokensUsed: totalTokensUsed,
       };
 
-      return [
-        summaryWithTokens,
-        ...results
-      ];
+      return [summaryWithTokens, ...results];
     } catch (error) {
       console.error(`Erreur lors du traitement des factures: ${error.message}`);
       return [
@@ -532,7 +533,7 @@ export class InvoiceParserService {
             input: 0,
             output: 0,
             total: 0,
-          }
+          },
         },
       ];
     }

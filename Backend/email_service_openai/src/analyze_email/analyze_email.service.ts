@@ -17,6 +17,7 @@ export interface EmailContent {
   date: Date;
   body: string;
   folderPath?: string; // Ajout du chemin du dossier où se trouve l'email
+  imapUID?: string;    // Identifiant unique IMAP de l'email
   analysis?: {
     summary: string;
     priority: 'high' | 'medium' | 'low';
@@ -53,7 +54,8 @@ interface TypedImap {
 // Ajout des interfaces pour le typage
 interface ImapMessage {
   on(event: string, callback: (stream: NodeJS.ReadableStream) => void): void;
-  once(event: string, callback: () => void): void;
+  once(event: 'end', callback: () => void): void;
+  once(event: 'attributes', callback: (attrs: { uid?: number }) => void): void;
 }
 
 interface ImapFetch {
@@ -243,6 +245,7 @@ export class AnalyzeEmailService {
                   const fetch = this.imap.fetch(results, {
                     bodies: [''],
                     struct: true,
+                    uid: true
                   }) as ImapFetch;
 
                   fetch.on('message', (msg: ImapMessage, seqno: number) => {
@@ -252,6 +255,13 @@ export class AnalyzeEmailService {
                           id: String(seqno),
                           folderPath: folder,
                         };
+                        
+                        // Capturer l'UID IMAP
+                        msg.once('attributes', (attrs) => {
+                          if (attrs && attrs.uid) {
+                            email.imapUID = String(attrs.uid);
+                          }
+                        });
 
                         msg.on('body', (stream: NodeJS.ReadableStream) => {
                           let buffer = '';
@@ -443,6 +453,7 @@ export class AnalyzeEmailService {
                   const fetch = this.imap.fetch(results, {
                     bodies: [''],
                     struct: true,
+                    uid: true
                   }) as ImapFetch;
 
                   fetch.on('message', (msg: ImapMessage, seqno: number) => {
@@ -452,6 +463,13 @@ export class AnalyzeEmailService {
                           id: String(seqno),
                           folderPath: folder,
                         };
+                        
+                        // Capturer l'UID IMAP
+                        msg.once('attributes', (attrs) => {
+                          if (attrs && attrs.uid) {
+                            email.imapUID = String(attrs.uid);
+                          }
+                        });
 
                         msg.on('body', (stream: NodeJS.ReadableStream) => {
                           let buffer = '';
@@ -839,17 +857,20 @@ export class AnalyzeEmailService {
       )
       .join('\n\n')}
     
-    Générer un résumé concis et direct sans utiliser de placeholders.
+    Générer un résumé conversationnel comme si tu parlais directement à l'utilisateur.
     
-    Structure:
-    1. Un titre clair "Résumé des emails du [date]"
-    2. Section "Emails prioritaires" - listez les emails prioritaires avec leur sujet, expéditeur et résumé
-    3. Section "Emails professionnels" - listez les emails professionnels importants
-    4. Section "Actions requises" - listez les actions spécifiques à entreprendre, numérotées
-    5. Section "Autres emails" - résumez brièvement les autres emails par catégorie
+    Instructions détaillées:
+    1. Commencer par "Bonjour, voici votre résumé d'emails du [date]"
+    2. Indiquer le nombre total d'emails analysés, combien sont prioritaires et combien requièrent une action
+    3. Présenter les emails les plus importants de façon conversationnelle, en regroupant ceux qui concernent le même sujet
+    4. Lister les actions principales recommandées (maximum 5) de façon naturelle
+    5. Mentionner brièvement les autres informations notables ou répartition par catégories
     
-    Utilisez un style concis et direct, avec une phrase maximum par point.
-    N'utilisez pas de placeholders comme [Action 1] ou [Résumé des autres emails].
+    Ton doit être:
+    - Chaleureux mais professionnel
+    - Direct et informatif
+    - Personnel (utiliser "votre", "vous", "vos")
+    - Conversationnel plutôt que structuré avec des titres
     `;
 
     try {
@@ -859,11 +880,11 @@ export class AnalyzeEmailService {
           {
             role: 'system',
             content:
-              "Tu es un assistant qui produit des résumés concis et directs des emails. Tu utilises EXACTEMENT le format demandé par l'utilisateur dans les instructions, sans aucune introduction ni conclusion.",
+              "Tu es un assistant personnel qui présente un résumé d'emails de façon conversationnelle et naturelle. Tu t'adresses directement à l'utilisateur comme si tu étais en train de lui parler.",
           },
           { role: 'user', content: summaryPrompt },
         ],
-        temperature: 0.3,
+        temperature: 0.5,
       });
 
       // Extraire les informations sur les tokens
@@ -1131,84 +1152,87 @@ export class AnalyzeEmailService {
         total: 0,
       };
 
-      // Structurer le résumé pour une présentation professionnelle
-      let formattedSummary = `📋 RÉSUMÉ PROFESSIONNEL\n\n`;
+      // Obtenir la date du jour au format français
+      const today = new Date();
+      const options: Intl.DateTimeFormatOptions = {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      };
+      const dateStr = today.toLocaleDateString('fr-FR', options);
 
-      // Statistiques globales
-      formattedSummary += `🔍 Aperçu général:\n`;
-      formattedSummary += `• Total emails: ${summaryData.totalEmails}\n`;
-      formattedSummary += `• Emails haute priorité: ${summaryData.highPriorityCount}\n`;
-      formattedSummary += `• Actions requises: ${summaryData.actionRequiredCount}\n\n`;
+      // Créer un résumé conversationnel
+      let formattedSummary = `Bonjour, voici votre résumé d'emails du ${dateStr}.\n\n`;
 
-      // Répartition par catégories professionnelles
-      formattedSummary += `📊 Répartition par catégories:\n`;
-      if (summaryData.categoryCounts) {
-        // Afficher les catégories professionnelles prioritaires
-        if (summaryData.categoryCounts.professionnel)
-          formattedSummary += `• Professionnels: ${summaryData.categoryCounts.professionnel}\n`;
+      // Aperçu du nombre d'emails
+      formattedSummary += `J'ai analysé ${summaryData.totalEmails} emails aujourd'hui`;
+      
+      if (summaryData.highPriorityCount > 0) {
+        formattedSummary += `, dont ${summaryData.highPriorityCount} nécessitent votre attention prioritaire`;
+      }
+      
+      if (summaryData.actionRequiredCount > 0) {
+        formattedSummary += ` et ${summaryData.actionRequiredCount} requièrent une action de votre part`;
+      }
+      formattedSummary += `.\n\n`;
 
-        if (summaryData.categoryCounts.facture)
-          formattedSummary += `• Factures: ${summaryData.categoryCounts.facture}\n`;
-
-        if (summaryData.categoryCounts.marketing)
-          formattedSummary += `• Marketing: ${summaryData.categoryCounts.marketing}\n`;
-
-        // Autres catégories
-        Object.entries(summaryData.categoryCounts)
-          .filter(
-            ([key]) =>
-              !['professionnel', 'facture', 'marketing', 'personnel'].includes(
-                key,
-              ),
-          )
-          .forEach(([key, count]) => {
-            formattedSummary += `• ${key.charAt(0).toUpperCase() + key.slice(1)}: ${count}\n`;
-          });
+      // Emails prioritaires
+      if (summaryData.topPriorityEmails && summaryData.topPriorityEmails.length > 0) {
+        formattedSummary += `Les emails les plus importants concernent `;
+        
+        const emailSubjects = summaryData.topPriorityEmails.map(email => 
+          `"${email.subject}" de ${email.from.split('<')[0].replace(/"/g, '')}`
+        );
+        
+        if (emailSubjects.length === 1) {
+          formattedSummary += `${emailSubjects[0]}`;
+        } else if (emailSubjects.length === 2) {
+          formattedSummary += `${emailSubjects[0]} et ${emailSubjects[1]}`;
+        } else {
+          const lastSubject = emailSubjects.pop();
+          formattedSummary += `${emailSubjects.join(', ')} et ${lastSubject}`;
+        }
+        formattedSummary += `.\n\n`;
       }
 
-      // Actions à entreprendre
+      // Actions requises
       if (summaryData.actionItems && summaryData.actionItems.length > 0) {
-        formattedSummary += `\n⚡ Actions requises:\n`;
-
-        // Regrouper les tâches par catégorie professionnelle
-        const professionalTasks = summaryData.actionItems.filter(
-          (item) =>
-            !item.toLowerCase().includes('facebook') &&
-            !item.toLowerCase().includes('personnel'),
-        );
-
-        professionalTasks.forEach((item, index) => {
-          formattedSummary += `${index + 1}. ${item}\n`;
-        });
-      }
-
-      // Emails haute priorité professionnels
-      if (
-        summaryData.topPriorityEmails &&
-        summaryData.topPriorityEmails.length > 0
-      ) {
-        const professionalHighPriority = summaryData.topPriorityEmails.filter(
-          (email) =>
-            email.analysis?.category === 'professionnel' ||
-            email.analysis?.category === 'facture',
-        );
-
-        if (professionalHighPriority.length > 0) {
-          formattedSummary += `\n🔴 Emails professionnels prioritaires:\n`;
-          professionalHighPriority.forEach((email) => {
-            formattedSummary += `• ${email.subject} - ${email.analysis?.summary}\n`;
+        const uniqueActions = [...new Set(summaryData.actionItems)];
+        if (uniqueActions.length === 1) {
+          formattedSummary += `L'action principale à effectuer est de ${uniqueActions[0].toLowerCase()}.\n\n`;
+        } else if (uniqueActions.length > 1) {
+          formattedSummary += `Voici les actions principales à effectuer :\n`;
+          uniqueActions.slice(0, 5).forEach((action, index) => {
+            formattedSummary += `${index + 1}. ${action}\n`;
           });
+          if (uniqueActions.length > 5) {
+            formattedSummary += `... et ${uniqueActions.length - 5} autres actions.\n`;
+          }
+          formattedSummary += `\n`;
         }
       }
 
-      // Résumé général
-      formattedSummary += `\n📝 Résumé général:\n${summaryData.summary}`;
+      // Résumé des catégories d'emails
+      if (summaryData.categoryCounts && Object.keys(summaryData.categoryCounts).length > 0) {
+        formattedSummary += `Vos emails se répartissent principalement entre `;
+        
+        const categories = Object.entries(summaryData.categoryCounts)
+          .sort((a, b) => b[1] - a[1])
+          .map(([category, count]) => `${count} emails ${category}s`);
+        
+        if (categories.length === 1) {
+          formattedSummary += `${categories[0]}`;
+        } else if (categories.length === 2) {
+          formattedSummary += `${categories[0]} et ${categories[1]}`;
+        } else {
+          const lastCategory = categories.pop();
+          formattedSummary += `${categories.join(', ')} et ${lastCategory}`;
+        }
+        formattedSummary += `.\n\n`;
+      }
 
-      // Informations sur les tokens utilisés pour les analyses
-      formattedSummary += `\n\n🔄 Statistiques d'utilisation API:\n`;
-      formattedSummary += `• Tokens entrée: ${initialTokensUsed.input}\n`;
-      formattedSummary += `• Tokens sortie: ${initialTokensUsed.output}\n`;
-      formattedSummary += `• Tokens total: ${initialTokensUsed.total}\n`;
+      // Résumé général
+      formattedSummary += `En résumé : ${summaryData.summary}\n\n`;
 
       return {
         formattedSummary,
@@ -1221,7 +1245,7 @@ export class AnalyzeEmailService {
         `Erreur lors du formatage professionnel du résumé: ${errorMessage}`,
       );
       return {
-        formattedSummary: 'Impossible de générer le résumé professionnel',
+        formattedSummary: 'Impossible de générer le résumé conversationnel de vos emails.',
         tokensUsed: {
           input: 0,
           output: 0,

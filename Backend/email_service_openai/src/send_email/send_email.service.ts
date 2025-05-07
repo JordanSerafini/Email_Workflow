@@ -69,8 +69,12 @@ export class SendEmailService {
     emailId: string,
   ): Promise<{
     originalEmail: EmailContent | null;
-    draftResponse: string 
-      | { response: string; tokensUsed: { input: number; output: number; total: number; }; };
+    draftResponse:
+      | string
+      | {
+          response: string;
+          tokensUsed: { input: number; output: number; total: number };
+        };
   }> {
     try {
       // Récupérer l'email original
@@ -117,8 +121,11 @@ export class SendEmailService {
     draftResponse: string,
     instructions: string,
   ): Promise<
-    string 
-    | { response: string; tokensUsed: { input: number; output: number; total: number; }; }
+    | string
+    | {
+        response: string;
+        tokensUsed: { input: number; output: number; total: number };
+      }
   > {
     try {
       // Récupérer l'email original

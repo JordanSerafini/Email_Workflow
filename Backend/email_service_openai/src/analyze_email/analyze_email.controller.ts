@@ -326,6 +326,7 @@ export class AnalyzeEmailController {
   async getAllTodayEmailsSummary(@Query('limit') limit?: string): Promise<{
     status: string;
     message: string;
+    data: EmailContent[];
     summary: {
       overview: string;
       totalEmails: number;
@@ -334,6 +335,11 @@ export class AnalyzeEmailController {
       categoryCounts: Record<string, number>;
       topPriorityEmails: EmailContent[];
       actionItems: string[];
+      tokensUsed?: {
+        input: number;
+        output: number;
+        total: number;
+      };
     };
   }> {
     try {
@@ -341,13 +347,18 @@ export class AnalyzeEmailController {
         `Génération du résumé de tous les emails d'aujourd'hui dans tous les dossiers`,
       );
 
+      // Log de la valeur brute du paramètre limit
+      this.logger.log(`Paramètre limit reçu: "${limit}"`);
+
       // Récupération et analyse des emails
       const todayEmails = await this.analyzeEmailService.getAllTodayEmails();
+      this.logger.log(`Nombre total d'emails récupérés: ${todayEmails.length}`);
 
       if (todayEmails.length === 0) {
         return {
           status: 'success',
           message: `Aucun email trouvé pour aujourd'hui dans tous les dossiers`,
+          data: [],
           summary: {
             overview: 'Aucun email à analyser',
             totalEmails: 0,
@@ -362,6 +373,15 @@ export class AnalyzeEmailController {
 
       // Appliquer la limite d'emails si spécifiée
       const limitValue = limit ? parseInt(limit, 10) : undefined;
+      this.logger.log(`Valeur de limite après parsing: ${limitValue}`);
+
+      // Vérifier que limitValue est un nombre valide
+      if (limitValue !== undefined && (isNaN(limitValue) || limitValue <= 0)) {
+        this.logger.warn(
+          `Valeur de limite invalide: ${limitValue}, utilisation de tous les emails`,
+        );
+      }
+
       const emailsToAnalyze =
         limitValue && limitValue > 0
           ? todayEmails.slice(0, limitValue)
@@ -371,14 +391,20 @@ export class AnalyzeEmailController {
         `Analyse de ${emailsToAnalyze.length}/${todayEmails.length} emails (limite: ${limitValue || 'aucune'})`,
       );
 
-      const analyzedEmails =
-        await this.analyzeEmailService.analyzeEmails(emailsToAnalyze);
-      const overallSummary =
-        await this.analyzeEmailService.generateOverallSummary(analyzedEmails);
+      // Vérifier que la limite a bien été appliquée
+      if (limitValue && limitValue > 0 && emailsToAnalyze.length > limitValue) {
+        this.logger.warn(
+          `La limite n'a pas été correctement appliquée: ${emailsToAnalyze.length} > ${limitValue}`,
+        );
+      }
+
+      const analyzedEmails = await this.analyzeEmailService.analyzeEmails(emailsToAnalyze);
+      const overallSummary = await this.analyzeEmailService.generateOverallSummary(analyzedEmails);
 
       return {
         status: 'success',
         message: `Résumé généré pour ${analyzedEmails.length}/${todayEmails.length} emails (limite: ${limitValue || 'aucune'})`,
+        data: analyzedEmails,
         summary: {
           overview: overallSummary.summary,
           totalEmails: overallSummary.totalEmails,
@@ -387,6 +413,7 @@ export class AnalyzeEmailController {
           categoryCounts: overallSummary.categoryCounts,
           topPriorityEmails: overallSummary.topPriorityEmails,
           actionItems: overallSummary.actionItems,
+          tokensUsed: overallSummary.tokensUsed,
         },
       };
     } catch (error: unknown) {
@@ -431,7 +458,7 @@ export class AnalyzeEmailController {
         return {
           status: 'success',
           message: `Aucun email non lu trouvé dans tous les dossiers`,
-          professionalSummary: 'Aucun email à analyser',
+          professionalSummary: "Bonjour, je n'ai trouvé aucun email non lu dans votre boîte de réception aujourd'hui.",
           tokensUsed: {
             input: 0,
             output: 0,
@@ -515,7 +542,7 @@ export class AnalyzeEmailController {
         return {
           status: 'success',
           message: `Aucun email trouvé dans tous les dossiers`,
-          professionalSummary: 'Aucun email à analyser',
+          professionalSummary: "Bonjour, je n'ai trouvé aucun email dans votre boîte de réception aujourd'hui. Tout est à jour!",
           tokensUsed: {
             input: 0,
             output: 0,
