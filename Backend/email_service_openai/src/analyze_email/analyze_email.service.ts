@@ -1061,10 +1061,14 @@ export class AnalyzeEmailService {
   }
 
   /**
-   * Génère un brouillon de réponse pour un email donné
+   * Génère un brouillon de réponse pour un email donné avec différents niveaux de détail
    * @param email Email pour lequel générer une réponse
+   * @param responseLength Niveau de détail de la réponse ('court', 'normal', 'détaillé')
    */
-  async generateEmailResponse(email: EmailContent): Promise<{
+  async generateEmailResponse(
+    email: EmailContent,
+    responseLength: 'court' | 'normal' | 'détaillé' = 'normal',
+  ): Promise<{
     response: string;
     tokensUsed: {
       input: number;
@@ -1073,12 +1077,38 @@ export class AnalyzeEmailService {
     };
   }> {
     this.logger.debug(
-      `Génération d'une réponse pour l'email: ${email.subject}`,
+      `Génération d'une réponse ${responseLength} pour l'email: ${email.subject}`,
     );
+
+    // Déterminer les instructions et paramètres selon le niveau de détail
+    let systemPrompt = '';
+    let maxTokens = 0;
+    let temperature = 0;
+
+    switch (responseLength) {
+      case 'court':
+        systemPrompt =
+          "Tu es un assistant professionnel expert en rédaction d'emails. Tu réponds de manière extrêmement concise, en 3-4 phrases maximum. Pas d'introduction ni formule de politesse longue, va directement à l'essentiel.";
+        maxTokens = 150;
+        temperature = 0.3;
+        break;
+      case 'détaillé':
+        systemPrompt =
+          "Tu es un assistant professionnel expert en rédaction d'emails. Tu réponds de manière détaillée et complète, couvrant tous les points de l'email, avec des explications, des précisions et des informations supplémentaires pertinentes. Utilise un format structuré avec des paragraphes distincts pour chaque point.";
+        maxTokens = 600;
+        temperature = 0.7;
+        break;
+      case 'normal':
+      default:
+        systemPrompt =
+          "Tu es un assistant professionnel expert en rédaction d'emails. Tu réponds de manière concise, claire et adaptée au contexte professionnel.";
+        maxTokens = 350;
+        temperature = 0.5;
+    }
 
     // Préparer le contenu pour la génération de réponse
     const prompt = `
-    Tu dois rédiger une réponse professionnelle à l'email suivant:
+    Tu dois rédiger une réponse professionnelle à l'email suivant (niveau de détail: ${responseLength}):
     
     De: ${email.from}
     À: ${email.to}
@@ -1089,12 +1119,13 @@ export class AnalyzeEmailService {
     ${email.body.substring(0, 1500)}
     
     Instructions pour la réponse:
-    - Garder un ton professionnel et courtois
-    - Répondre directement aux questions ou demandes
-    - Être concis mais complet
-    - Si l'email concerne une réunion ou un rendez-vous, confirmer la disponibilité
-    - Si l'email concerne une demande d'information, fournir des réponses précises ou demander plus de détails si nécessaire
-    - Terminer par une formule de politesse appropriée
+    ${
+      responseLength === 'court'
+        ? "- Sois extrêmement concis (3-4 phrases maximum)\n- Va directement à l'essentiel\n- Formule de politesse brève"
+        : responseLength === 'détaillé'
+          ? '- Réponds en détail à tous les points\n- Ajoute des informations supplémentaires utiles\n- Structure ta réponse avec plusieurs paragraphes\n- Inclus une introduction et conclusion appropriées'
+          : '- Sois clair et professionnel\n- Réponds aux points principaux\n- Utilise une formule de politesse adaptée'
+    }
     
     Rédige uniquement le corps de l'email, sans objet ni formule d'introduction comme "Voici ma réponse:".
     `;
@@ -1103,14 +1134,11 @@ export class AnalyzeEmailService {
       const response = await this.openai.chat.completions.create({
         model: 'gpt-3.5-turbo',
         messages: [
-          {
-            role: 'system',
-            content:
-              "Tu es un assistant professionnel expert en rédaction d'emails. Tu réponds de manière concise, claire et adaptée au contexte professionnel.",
-          },
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: prompt },
         ],
-        temperature: 0.7,
+        temperature,
+        max_tokens: maxTokens,
       });
 
       // Extraire les informations sur les tokens
@@ -1121,7 +1149,7 @@ export class AnalyzeEmailService {
       };
 
       this.logger.debug(
-        `Tokens utilisés pour la génération de réponse: ${tokensUsed.total} (entrée: ${tokensUsed.input}, sortie: ${tokensUsed.output})`,
+        `Tokens utilisés pour la génération de réponse ${responseLength}: ${tokensUsed.total} (entrée: ${tokensUsed.input}, sortie: ${tokensUsed.output})`,
       );
 
       const draftResponse =

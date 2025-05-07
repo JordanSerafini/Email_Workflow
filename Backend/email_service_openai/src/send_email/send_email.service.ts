@@ -63,10 +63,12 @@ export class SendEmailService {
    * Génère une réponse automatique à un email
    * @param mailbox Boîte mail contenant l'email
    * @param emailId ID de l'email à répondre
+   * @param responseLength Niveau de détail de la réponse ('court', 'normal', 'détaillé')
    */
   async generateResponseForEmail(
     mailbox: string,
     emailId: string,
+    responseLength: 'court' | 'normal' | 'détaillé' = 'normal',
   ): Promise<{
     originalEmail: EmailContent | null;
     draftResponse:
@@ -92,9 +94,11 @@ export class SendEmailService {
         ? email
         : (await this.analyzeEmailService.analyzeEmails([email]))[0];
 
-      // Générer une réponse automatique
+      // Générer une réponse automatique avec la longueur spécifiée
       const draftResponse =
-        await this.analyzeEmailService.generateEmailResponse(analyzedEmail);
+        await this.analyzeEmailService.generateEmailResponse(analyzedEmail, responseLength);
+
+      this.logger.log(`Réponse ${responseLength} générée pour l'email ${emailId}`);
 
       return {
         originalEmail: analyzedEmail,

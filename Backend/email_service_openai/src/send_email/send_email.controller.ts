@@ -21,18 +21,24 @@ export class SendEmailController {
    * Génère une réponse automatique à un email spécifique
    * @param emailId ID de l'email à répondre
    * @param mailbox Nom de la boîte aux lettres (optionnel, par défaut: INBOX)
+   * @param responseLength Niveau de détail de la réponse (optionnel, par défaut: normal)
    */
   @Get('draft-response/:emailId')
   async generateDraftResponse(
     @Param('emailId') emailId: string,
     @Query('mailbox') mailbox: string = 'INBOX',
+    @Query('responseLength')
+    responseLength: 'court' | 'normal' | 'détaillé' = 'normal',
   ) {
     try {
-      this.logger.log(`Génération d'une réponse pour l'email ${emailId}`);
+      this.logger.log(
+        `Génération d'une réponse ${responseLength} pour l'email ${emailId}`,
+      );
 
       const result = await this.sendEmailService.generateResponseForEmail(
         mailbox,
         emailId,
+        responseLength,
       );
 
       if (!result.originalEmail) {
@@ -54,9 +60,10 @@ export class SendEmailController {
 
       return {
         status: 'success',
-        message: 'Brouillon de réponse généré avec succès',
+        message: `Brouillon de réponse ${responseLength} généré avec succès`,
         data: {
           ...responseData,
+          responseLength,
           originalEmail: {
             id: result.originalEmail.id,
             from: result.originalEmail.from,
@@ -193,21 +200,33 @@ export class SendEmailController {
 
   /**
    * Génère et envoie directement une réponse à un email
+   * @param emailId ID de l'email à répondre
+   * @param responseLength Niveau de détail de la réponse ('court', 'normal', 'détaillé')
+   * @param customInstructions Instructions personnalisées pour la reformulation
+   * @param customSubject Objet personnalisé pour l'email de réponse
    */
   @Post('auto-respond/:emailId')
   async autoRespond(
     @Param('emailId') emailId: string,
     @Body()
-    requestBody: { customInstructions?: string; customSubject?: string },
+    requestBody: {
+      responseLength?: 'court' | 'normal' | 'détaillé';
+      customInstructions?: string;
+      customSubject?: string;
+    },
     @Query('mailbox') mailbox: string = 'INBOX',
   ) {
     try {
-      this.logger.log(`Réponse automatique à l'email ${emailId}`);
+      const responseLength = requestBody.responseLength || 'normal';
+      this.logger.log(
+        `Réponse automatique ${responseLength} à l'email ${emailId}`,
+      );
 
-      // Générer un brouillon de réponse
+      // Générer un brouillon de réponse avec la longueur spécifiée
       const draftResult = await this.sendEmailService.generateResponseForEmail(
         mailbox,
         emailId,
+        responseLength,
       );
 
       if (!draftResult.originalEmail) {
@@ -250,6 +269,7 @@ export class SendEmailController {
         message: sendResult.message,
         data: {
           responseText: responseText,
+          responseLength: responseLength,
         },
       };
     } catch (error: unknown) {
