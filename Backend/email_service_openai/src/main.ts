@@ -8,8 +8,9 @@ async function bootstrap() {
 
   // Activer CORS pour toutes les origines
   app.enableCors({
-    origin: '*',
+    origin: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: 'Content-Type,Accept,Authorization',
     credentials: true,
   });
 
