@@ -398,8 +398,10 @@ export class AnalyzeEmailController {
         );
       }
 
-      const analyzedEmails = await this.analyzeEmailService.analyzeEmails(emailsToAnalyze);
-      const overallSummary = await this.analyzeEmailService.generateOverallSummary(analyzedEmails);
+      const analyzedEmails =
+        await this.analyzeEmailService.analyzeEmails(emailsToAnalyze);
+      const overallSummary =
+        await this.analyzeEmailService.generateOverallSummary(analyzedEmails);
 
       return {
         status: 'success',
@@ -458,7 +460,8 @@ export class AnalyzeEmailController {
         return {
           status: 'success',
           message: `Aucun email non lu trouvé dans tous les dossiers`,
-          professionalSummary: "Bonjour, je n'ai trouvé aucun email non lu dans votre boîte de réception aujourd'hui.",
+          professionalSummary:
+            "Bonjour, je n'ai trouvé aucun email non lu dans votre boîte de réception aujourd'hui.",
           tokensUsed: {
             input: 0,
             output: 0,
@@ -542,7 +545,8 @@ export class AnalyzeEmailController {
         return {
           status: 'success',
           message: `Aucun email trouvé dans tous les dossiers`,
-          professionalSummary: "Bonjour, je n'ai trouvé aucun email dans votre boîte de réception aujourd'hui. Tout est à jour!",
+          professionalSummary:
+            "Bonjour, je n'ai trouvé aucun email dans votre boîte de réception aujourd'hui. Tout est à jour!",
           tokensUsed: {
             input: 0,
             output: 0,
