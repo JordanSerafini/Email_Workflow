@@ -1,0 +1,458 @@
+type: collection.insomnia.rest/5.0
+name: Email-Parser
+meta:
+  id: wrk_2039e2f54e6d4f4ab4c3d756cac237c9
+  created: 1744011544995
+  modified: 1744011544995
+collection:
+  - name: Sort_Emails
+    meta:
+      id: fld_373817f001f144af9c242b013a7b2da6
+      created: 1744011551755
+      modified: 1746444225691
+      sortKey: -1744011551755
+    children:
+      - url: http://localhost:3002/sort-email/status
+        name: Get Status
+        meta:
+          id: req_50a8ee06b3f144d8a5404d1c138a3892
+          created: 1744011553882
+          modified: 1746444874370
+          isPrivate: false
+          sortKey: -1744011553882
+        method: GET
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"query": "quyi travail demain"
+
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:3002/sort-email/sort
+        name: Sort Emails (unseen)
+        meta:
+          id: req_79c9fe1744fa4e67b93cd63a3e99aff7
+          created: 1746444902078
+          modified: 1746603280614
+          isPrivate: false
+          sortKey: -1743420415139
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"limit": 5
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:3002/sort-email/sort-by-category
+        name: Sort Emails By Category (body)
+        meta:
+          id: req_aac5d0342f9041c289c25b9fa8bbbeb0
+          created: 1746445785317
+          modified: 1746446348051
+          isPrivate: false
+          sortKey: -1743124845767.5
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+            	"category": "Factures"
+
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:3002/sort-email/sort-all
+        name: Sort Emails (ALL)
+        meta:
+          id: req_c94bfe37b1da4c7c9ae3ece9edf24224
+          created: 1746446289662
+          modified: 1746446294038
+          isPrivate: false
+          sortKey: -1743272630453.25
+        method: POST
+        body:
+          mimeType: application/json
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:3002/sort-email/analyze-all-folders/all
+        name: Analyze _invoices (unseen)
+        meta:
+          id: req_a3fa2fb3e3e840fca9785cf93588c724
+          created: 1746446309951
+          modified: 1746452240085
+          isPrivate: false
+          sortKey: -1742977061081.75
+        method: POST
+        body:
+          mimeType: application/json
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "http://localhost:3002/sort-email/analyze-all-folders/all "
+        name: Analyze _invoices ALL
+        meta:
+          id: req_410eecc0f035494bb8c69a210d479aa6
+          created: 1746452201874
+          modified: 1746452394152
+          isPrivate: false
+          sortKey: -1742903168738.875
+        method: POST
+        body:
+          mimeType: application/json
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:3002/sort-email/analyze-invoices
+        name: Analyze _invoices (unseen) INBOX
+        meta:
+          id: req_c577b2e39a2b46338cb65c642864d0e1
+          created: 1746452353413
+          modified: 1746452360544
+          isPrivate: false
+          sortKey: -1742940114910.3125
+        method: POST
+        body:
+          mimeType: application/json
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: Invoice_Parser
+    meta:
+      id: fld_9260f2da718b42e1a1be5f148dd9b439
+      created: 1746446817242
+      modified: 1746448425127
+      sortKey: -1746446817242
+    children:
+      - url: http://localhost:3002/invoice-parser/process/Factures_4.png
+        name: process 1 (req.params)
+        meta:
+          id: req_a0fb3e4a8c9d47dca13b98a68732e870
+          created: 1746446819567
+          modified: 1746447970896
+          isPrivate: false
+          sortKey: -1746446819567
+        method: GET
+        headers:
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:3002/invoice-parser/process-all
+        name: process ALL
+        meta:
+          id: req_2eb883380d8548f592487fb416f66da4
+          created: 1746447938262
+          modified: 1746447951227
+          isPrivate: false
+          sortKey: -1746139756330
+        method: GET
+        headers:
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: Analyze_Emails
+    meta:
+      id: fld_6c8653721636416b93180e76622e4a9a
+      created: 1746448420059
+      modified: 1746448420059
+      sortKey: -1746448420059
+    children:
+      - url: http://localhost:3002/analyze-email/today?mailbox=INBOX&summary=true
+        name: "Daily analyze (unseen) + summary : DETAILLED"
+        meta:
+          id: req_1fe0b496a569421fb524ca14f5d6045c
+          created: 1746448484099
+          modified: 1746448670876
+          isPrivate: false
+          sortKey: -1746448484099
+        method: GET
+        headers:
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:3002/analyze-email/today/summary?mailbox=INBOX
+        name: Daily summay (unseen)
+        meta:
+          id: req_3f8f6bbe09e148e8930ea0084161124a
+          created: 1746448677036
+          modified: 1746449096379
+          isPrivate: false
+          sortKey: -1746447651833
+        method: GET
+        headers:
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:3002/analyze-email/today/all
+        name: Daily analyze ALL
+        meta:
+          id: req_4bc82b486701408d93f527e60964c188
+          created: 1746448828914
+          modified: 1746448841936
+          isPrivate: false
+          sortKey: -1746447235700
+        method: GET
+        headers:
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: http://localhost:4444/analyze-email/today/all/summary
+        name: Daily analyze ALL + summary
+        meta:
+          id: req_6d902c21b99d463bbf002cec448a11db
+          created: 1746448846613
+          modified: 1746604117129
+          isPrivate: false
+          sortKey: -1746447027633.5
+        method: GET
+        headers:
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: Sender_Emails
+    meta:
+      id: fld_774e7402a97947eba3f63745f4798378
+      created: 1746450992718
+      modified: 1746450992718
+      sortKey: -1746450992718
+    children:
+      - url: http://localhost:3002/send-email/draft-response/:emailId
+        name: Brouillon by Mail ID (params)
+        meta:
+          id: req_b712f36a7c8f4131ba3102bee9f31d96
+          created: 1746450999340
+          modified: 1746451043607
+          isPrivate: false
+          sortKey: -1746450999340
+        method: GET
+        headers:
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+        pathParameters:
+          - name: emailId
+      - url: http://localhost:3002/send-email/rewrite-response/:emailId
+        name: Rewrite reponsve by mailID
+        meta:
+          id: req_7cf46c9bff594238a5b0791fc436fd27
+          created: 1746451059944
+          modified: 1746451067714
+          isPrivate: false
+          sortKey: -1746449741719.5
+        method: POST
+        headers:
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+        pathParameters:
+          - name: emailId
+      - url: http://localhost:3002/send-email/send-response/:emailId
+        name: SendResponse to mailID
+        meta:
+          id: req_0b5a79a70d0b4f3a9a0ae70080ae25f6
+          created: 1746451082213
+          modified: 1746451089167
+          isPrivate: false
+          sortKey: -1746449112909.25
+        method: POST
+        headers:
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+        pathParameters:
+          - name: emailId
+      - url: http://localhost:3002/send-email/auto-respond/:emailId
+        name: generate and send to mailID
+        meta:
+          id: req_2434a3ce9fba43228c2730c9f023d635
+          created: 1746451101579
+          modified: 1746451108096
+          isPrivate: false
+          sortKey: -1746448798504.125
+        method: POST
+        headers:
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+        pathParameters:
+          - name: emailId
+      - url: http://localhost:3002/send-email/list-requiring-response?mailbox=INBOX
+        name: List require response
+        meta:
+          id: req_dfd1554e8ec849f68baba2bce8b7635e
+          created: 1746451329484
+          modified: 1746451344316
+          isPrivate: false
+          sortKey: -1746451329484
+        method: GET
+        headers:
+          - name: User-Agent
+            value: insomnia/11.0.2
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+cookieJar:
+  name: Default Jar
+  meta:
+    id: jar_e9946657a8391b97946409344119dc01c8108548
+    created: 1744011544998
+    modified: 1744011544998
+environments:
+  name: Base Environment
+  meta:
+    id: env_e9946657a8391b97946409344119dc01c8108548
+    created: 1744011544997
+    modified: 1744011544997
+    isPrivate: false

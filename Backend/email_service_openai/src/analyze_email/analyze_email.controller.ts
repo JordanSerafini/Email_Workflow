@@ -323,7 +323,7 @@ export class AnalyzeEmailController {
    * Endpoint dédié au résumé global de tous les emails d'aujourd'hui (lus et non lus)
    */
   @Get('today/all/summary')
-  async getAllTodayEmailsSummary(): Promise<{
+  async getAllTodayEmailsSummary(@Query('limit') limit?: string): Promise<{
     status: string;
     message: string;
     summary: {
@@ -360,14 +360,25 @@ export class AnalyzeEmailController {
         };
       }
 
+      // Appliquer la limite d'emails si spécifiée
+      const limitValue = limit ? parseInt(limit, 10) : undefined;
+      const emailsToAnalyze =
+        limitValue && limitValue > 0
+          ? todayEmails.slice(0, limitValue)
+          : todayEmails;
+
+      this.logger.log(
+        `Analyse de ${emailsToAnalyze.length}/${todayEmails.length} emails (limite: ${limitValue || 'aucune'})`,
+      );
+
       const analyzedEmails =
-        await this.analyzeEmailService.analyzeEmails(todayEmails);
+        await this.analyzeEmailService.analyzeEmails(emailsToAnalyze);
       const overallSummary =
         await this.analyzeEmailService.generateOverallSummary(analyzedEmails);
 
       return {
         status: 'success',
-        message: `Résumé généré pour ${analyzedEmails.length} emails`,
+        message: `Résumé généré pour ${analyzedEmails.length}/${todayEmails.length} emails (limite: ${limitValue || 'aucune'})`,
         summary: {
           overview: overallSummary.summary,
           totalEmails: overallSummary.totalEmails,
