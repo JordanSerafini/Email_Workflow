@@ -86,8 +86,6 @@ export class InvoiceParserService {
     try {
       console.log(`[InvoiceParser] Extraction du texte depuis: ${filePath}`);
 
-      // Si c'est une image, on ne peut pas extraire directement le texte,
-      // donc on retourne un message indiquant qu'on va l'envoyer directement à OpenAI
       if (this.isImageFile(filePath)) {
         console.log(
           `[InvoiceParser] Format d'image détecté, préparation pour l'API Vision`,
@@ -95,10 +93,8 @@ export class InvoiceParserService {
         return `[ANALYSE D'IMAGE: ${path.basename(filePath)}]`;
       }
 
-      // Sinon, on procède comme avant pour les PDFs
       let pdfParse;
       try {
-        // Import dynamique de pdf-parse
         pdfParse = require('pdf-parse');
       } catch (importError) {
         console.error('Module pdf-parse non disponible:', importError.message);
@@ -142,13 +138,11 @@ export class InvoiceParserService {
    */
   async analyzeInvoiceText(text: string, filePath?: string): Promise<any> {
     try {
-      // Si on a une indication d'analyse d'image, on procède différemment
       const isImageAnalysis = text.startsWith("[ANALYSE D'IMAGE:");
       console.log(
         `[InvoiceParser] Analyse de texte - Mode image: ${isImageAnalysis}`,
       );
 
-      // Si le texte indique une erreur d'extraction, renvoyer directement l'erreur
       if (text.startsWith('[ERREUR:')) {
         console.log(`[InvoiceParser] Erreur détectée dans le texte: ${text}`);
         return { error: text };
@@ -195,7 +189,6 @@ export class InvoiceParserService {
         });
         console.log(`[InvoiceParser] Réponse reçue de l'API Vision`);
       } else {
-        // Pour le texte extrait de PDF, on procède comme avant
         console.log(`[InvoiceParser] Envoi du texte à l'API OpenAI...`);
         const prompt = `Voici une facture au format texte. Récupère le fournisseur, la date, le numéro, les produits, et les montants en JSON sans aucun autre texte ni délimiteur markdown :\n\n${text}`;
 
@@ -209,7 +202,6 @@ export class InvoiceParserService {
         );
       }
 
-      // Extraire les informations sur les tokens
       tokensUsed = {
         input: response.usage?.prompt_tokens || 0,
         output: response.usage?.completion_tokens || 0,
@@ -220,13 +212,11 @@ export class InvoiceParserService {
         `[InvoiceParser] Tokens utilisés: entrée=${tokensUsed.input}, sortie=${tokensUsed.output}, total=${tokensUsed.total}`,
       );
 
-      // Récupérer le contenu JSON de la réponse
       const jsonContent = response.choices[0].message.content || '';
       console.log(
         `[InvoiceParser] Contenu JSON reçu: ${jsonContent.substring(0, 100)}...`,
       );
 
-      // Nettoyer la réponse JSON si elle contient des délimiteurs markdown
       const cleanedJsonContent = this.cleanJsonResponse(jsonContent);
 
       try {
